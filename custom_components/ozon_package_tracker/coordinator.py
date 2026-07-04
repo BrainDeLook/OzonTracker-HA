@@ -96,10 +96,14 @@ class OzonPackageCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 info = meta.get("last_data") or {
                     "tracking_number": track,
                     "status": None,
+                    "status_code": None,
                     "delivered": False,
                     "events": [],
                     "courier": None,
+                    "delivery_type": None,
                     "estimated_delivery": None,
+                    "delivery_date_begin": None,
+                    "delivery_date_end": None,
                 }
 
             if info.get("delivered"):

@@ -7,7 +7,7 @@
   const CARD_TAG = "ozon-package-card";
   const EDITOR_TAG = "ozon-package-card-editor";
   const DOMAIN = "ozon_package_tracker";
-  const CARD_VERSION = "0.1.0";
+  const CARD_VERSION = "0.2.0";
 
   const STRINGS = {
     ru: {
@@ -26,6 +26,7 @@
       delivered: "Доставлено",
       updated: "Обновлено",
       history: "История",
+      eta: "доставка",
     },
     en: {
       default_title: "Ozon packages",
@@ -43,6 +44,7 @@
       delivered: "Delivered",
       updated: "Updated",
       history: "History",
+      eta: "delivery",
     },
   };
 
@@ -223,6 +225,7 @@
           s.state,
           s.attributes.title,
           s.attributes.last_event_time,
+          s.attributes.estimated_delivery,
           (s.attributes.events || []).length,
           this._expanded.has(s.entity_id),
         ])
@@ -286,6 +289,9 @@
       }
       if (this._config.show_last_event && attrs.last_event_time) {
         secondaryParts.push(formatTime(attrs.last_event_time, this._hass.language));
+      }
+      if (attrs.estimated_delivery && !delivered) {
+        secondaryParts.push(`${this._t("eta")}: ${attrs.estimated_delivery}`);
       }
 
       let eventsHtml = "";

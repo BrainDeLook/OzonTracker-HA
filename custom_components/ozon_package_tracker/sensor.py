@@ -107,7 +107,10 @@ class OzonPackageSensor(
         status = (info.get("status") or "").lower()
         if info.get("delivered"):
             return "mdi:package-variant-closed-check"
-        if any(word in status for word in ("отмен", "возврат", "cancel", "return")):
+        if any(
+            word in status
+            for word in ("отмен", "возврат", "возвращ", "отказ", "cancel", "return")
+        ):
             return "mdi:package-variant-remove"
         if any(word in status for word in ("выдач", "пункт", "постамат", "pickup")):
             return "mdi:package-down"
@@ -125,8 +128,12 @@ class OzonPackageSensor(
             "title": info.get("title") or self.tracking_number,
             ATTR_TRACKING_NUMBER: self.tracking_number,
             "delivered": info.get("delivered", False),
+            "status_code": info.get("status_code"),
             "courier": info.get("courier"),
+            "delivery_type": info.get("delivery_type"),
             "estimated_delivery": info.get("estimated_delivery"),
+            "delivery_date_begin": info.get("delivery_date_begin"),
+            "delivery_date_end": info.get("delivery_date_end"),
             "last_event": last_event["status"] if last_event else None,
             "last_event_time": last_event["time"] if last_event else None,
             "events": events,

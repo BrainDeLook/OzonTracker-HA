@@ -1,17 +1,29 @@
 """Client for the public tracking.ozon.ru parcel tracking service.
 
-There is no official public documentation for this endpoint, so the client is
-deliberately defensive:
+The tracking web page loads its data from
+``GET https://tracking.ozon.ru/p-api/ozon-track-bff/tracking/{tracking_number}``
+which returns JSON like::
 
-1. It first tries the JSON API used by the tracking web page
-   (``GET https://tracking.ozon.ru/api/tracking?trackingNumber=...``).
-2. Then a ``POST`` variant of the same endpoint.
-3. As a last resort it downloads the HTML page and extracts any embedded
-   JSON state (Nuxt/Next style payloads).
+    {
+        "deliveryDateBegin": "2026-07-16T08:30:00+00:00",
+        "deliveryDateEnd": "2026-07-24T08:30:00+00:00",
+        "deliveryDatePeriodChangedMoment": "2026-06-29T20:20:22+00:00",
+        "deliveryType": "Courier",
+        "deliveryPostponementType": "Unknown",
+        "items": [
+            {"event": "Created", "moment": "2026-06-29T20:20:37+00:00"},
+            {"event": "TransferringToDelivery", "moment": "..."},
+            {"event": "WayToCity", "moment": "..."}
+        ]
+    }
 
-The response parser does not rely on an exact schema either: it recursively
-searches the payload for a status string and a list of tracking events, so
-minor changes on Ozon's side keep working without a code update.
+There is no "current status" field: the newest entry of ``items`` is the
+current state, and ``event`` is a machine code that we map to human readable
+Russian text. Unknown codes fall back to a de-camel-cased version of the code
+so new Ozon statuses still render something sensible.
+
+Because the endpoint is not officially documented, a generic schema-tolerant
+parser and an HTML-page fallback are kept as safety nets for future changes.
 """
 
 from __future__ import annotations
@@ -22,12 +34,13 @@ import logging
 import re
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import quote
 
 import aiohttp
 
 _LOGGER = logging.getLogger(__name__)
 
-API_ENDPOINT = "https://tracking.ozon.ru/api/tracking"
+API_ENDPOINT = "https://tracking.ozon.ru/p-api/ozon-track-bff/tracking/{tracking_number}"
 PAGE_URL = "https://tracking.ozon.ru/"
 
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
@@ -40,7 +53,53 @@ BROWSER_HEADERS = {
     "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
-# Keys that may contain human readable event/status text.
+# Human readable (Russian) names for the BFF event codes. Unknown codes are
+# rendered by _humanize_code() instead.
+EVENT_NAMES = {
+    "Created": "Заказ создан",
+    "AwaitingPackaging": "Ожидает сборки",
+    "Packaging": "Собирается",
+    "Packed": "Заказ собран",
+    "TransferringToDelivery": "Передаётся в доставку",
+    "TransferredToDelivery": "Передано в доставку",
+    "WayToCity": "Едет в ваш город",
+    "ArrivedToCity": "Прибыло в ваш город",
+    "ArrivedInCity": "Прибыло в ваш город",
+    "OnSortingCenter": "На сортировочном центре",
+    "SortingCenter": "На сортировочном центре",
+    "WayToPickPoint": "Едет в пункт выдачи",
+    "ArrivedToPickPoint": "Прибыло в пункт выдачи",
+    "DeliveredToPickPoint": "Прибыло в пункт выдачи",
+    "ReadyForPickup": "Готово к выдаче",
+    "CourierInTransit": "Курьер в пути",
+    "Delivering": "Доставляется",
+    "Delivered": "Доставлено",
+    "DeliveredToClient": "Вручено",
+    "PickedUpByClient": "Получено",
+    "Cancelled": "Отменено",
+    "Canceled": "Отменено",
+    "ClientRefused": "Покупатель отказался",
+    "Returning": "Возвращается продавцу",
+    "Returned": "Возвращено продавцу",
+}
+
+DELIVERY_TYPE_NAMES = {
+    "Courier": "Курьер",
+    "PickPoint": "Пункт выдачи",
+    "PickupPoint": "Пункт выдачи",
+    "Postamat": "Постамат",
+    "Post": "Почта",
+}
+
+DELIVERED_CODES = {
+    "Delivered",
+    "DeliveredToClient",
+    "PickedUpByClient",
+    "Received",
+}
+
+# --- generic fallback parser configuration -------------------------------
+
 TEXT_KEYS = (
     "statusText",
     "status_text",
@@ -49,12 +108,12 @@ TEXT_KEYS = (
     "name",
     "title",
     "status",
+    "event",
     "text",
     "description",
     "message",
 )
 
-# Keys that may contain an event timestamp.
 TIME_KEYS = (
     "date",
     "datetime",
@@ -70,7 +129,6 @@ TIME_KEYS = (
     "event_dt",
 )
 
-# Keys that may contain the current overall status, in priority order.
 STATUS_KEYS = (
     "currentStatusText",
     "current_status_text",
@@ -85,31 +143,6 @@ STATUS_KEYS = (
     "tracking_status",
     "status",
     "state",
-)
-
-COURIER_KEYS = (
-    "courierName",
-    "courier_name",
-    "courier",
-    "carrierName",
-    "carrier_name",
-    "carrier",
-    "deliveryService",
-    "delivery_service",
-    "transportCompany",
-    "transport_company",
-)
-
-ETA_KEYS = (
-    "plannedDeliveryDate",
-    "planned_delivery_date",
-    "estimatedDeliveryDate",
-    "estimated_delivery_date",
-    "expectedDeliveryDate",
-    "expected_delivery_date",
-    "deliveryDateEstimate",
-    "deliveryDate",
-    "delivery_date",
 )
 
 DELIVERED_MARKERS = (
@@ -141,8 +174,7 @@ class OzonTrackingApi:
         errors: list[str] = []
 
         attempts = (
-            ("api-get", self._fetch_api_get),
-            ("api-post", self._fetch_api_post),
+            ("bff-api", self._fetch_bff),
             ("page", self._fetch_page),
         )
         for name, attempt in attempts:
@@ -155,7 +187,9 @@ class OzonTrackingApi:
                 errors.append(f"{name}: {err}")
                 continue
             for payload in payloads:
-                normalized = normalize_payload(payload, track)
+                normalized = parse_bff_payload(payload, track) or normalize_payload(
+                    payload, track
+                )
                 if normalized is not None:
                     return normalized
             errors.append(f"{name}: unrecognized payload structure")
@@ -164,35 +198,18 @@ class OzonTrackingApi:
             f"Could not fetch tracking data for {track}: " + "; ".join(errors)
         )
 
-    async def _fetch_api_get(self, track: str, referer: str) -> list[Any]:
+    async def _fetch_bff(self, track: str, referer: str) -> list[Any]:
+        url = API_ENDPOINT.format(tracking_number=quote(track, safe=""))
         headers = {
             **BROWSER_HEADERS,
             "Accept": "application/json, text/plain, */*",
             "Referer": referer,
         }
         async with self._session.get(
-            API_ENDPOINT,
-            params={"trackingNumber": track},
-            headers=headers,
-            timeout=REQUEST_TIMEOUT,
+            url, headers=headers, timeout=REQUEST_TIMEOUT
         ) as resp:
-            if resp.status != 200:
-                raise OzonTrackingApiError(f"HTTP {resp.status}")
-            text = await resp.text()
-        return [_loads(text)]
-
-    async def _fetch_api_post(self, track: str, referer: str) -> list[Any]:
-        headers = {
-            **BROWSER_HEADERS,
-            "Accept": "application/json, text/plain, */*",
-            "Referer": referer,
-        }
-        async with self._session.post(
-            API_ENDPOINT,
-            json={"trackingNumber": track},
-            headers=headers,
-            timeout=REQUEST_TIMEOUT,
-        ) as resp:
+            if resp.status == 404:
+                raise OzonTrackingApiError("HTTP 404: tracking number not found")
             if resp.status != 200:
                 raise OzonTrackingApiError(f"HTTP {resp.status}")
             text = await resp.text()
@@ -223,6 +240,96 @@ def _loads(text: str) -> Any:
         return json.loads(text)
     except json.JSONDecodeError as err:
         raise OzonTrackingApiError(f"invalid JSON: {err}") from err
+
+
+def _humanize_code(code: str) -> str:
+    """Turn an unknown event code like 'WayToCity' into 'Way to city'."""
+    spaced = re.sub(r"(?<=[a-zа-я0-9])(?=[A-ZА-Я])", " ", code).replace("_", " ")
+    return spaced[:1].upper() + spaced[1:].lower() if spaced else code
+
+
+def _event_text(code: str) -> str:
+    return EVENT_NAMES.get(code) or _humanize_code(code)
+
+
+def _format_date(value: str | None) -> str | None:
+    moment = _parse_time(value)
+    return moment.strftime("%d.%m.%Y") if moment else None
+
+
+def parse_bff_payload(payload: Any, tracking_number: str) -> dict[str, Any] | None:
+    """Parse the known ozon-track-bff response shape.
+
+    Returns ``None`` when the payload does not match, so the generic parser
+    can have a try.
+    """
+    if not isinstance(payload, dict):
+        return None
+    items = payload.get("items")
+    if not isinstance(items, list):
+        return None
+
+    events: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            return None
+        code = item.get("event")
+        if not isinstance(code, str) or not code:
+            return None
+        moment = item.get("moment")
+        events.append(
+            {
+                "time": moment if isinstance(moment, str) else None,
+                "status": _event_text(code),
+                "code": code,
+            }
+        )
+
+    # Items come oldest-first; expose newest-first like the rest of the code.
+    parsed = [(_parse_time(event["time"]), event) for event in events]
+    if parsed and all(moment is not None for moment, _ in parsed):
+        parsed.sort(key=lambda pair: pair[0], reverse=True)  # type: ignore[arg-type, return-value]
+        events = [event for _, event in parsed]
+    else:
+        events = list(reversed(events))
+
+    if not events:
+        return None
+    latest = events[0]
+    delivered = latest["code"] in DELIVERED_CODES or "delivered" in latest[
+        "code"
+    ].lower()
+
+    date_begin = _format_date(payload.get("deliveryDateBegin"))
+    date_end = _format_date(payload.get("deliveryDateEnd"))
+    if date_begin and date_end and date_begin != date_end:
+        estimated = f"{date_begin} – {date_end}"
+    else:
+        estimated = date_begin or date_end
+
+    delivery_type = payload.get("deliveryType")
+    if isinstance(delivery_type, str) and delivery_type not in ("", "Unknown"):
+        delivery_type_name = DELIVERY_TYPE_NAMES.get(
+            delivery_type, _humanize_code(delivery_type)
+        )
+    else:
+        delivery_type_name = None
+
+    return {
+        "tracking_number": tracking_number,
+        "status": latest["status"],
+        "status_code": latest["code"],
+        "delivered": delivered,
+        "events": events[:20],
+        "courier": None,
+        "delivery_type": delivery_type_name,
+        "estimated_delivery": estimated,
+        "delivery_date_begin": payload.get("deliveryDateBegin"),
+        "delivery_date_end": payload.get("deliveryDateEnd"),
+    }
+
+
+# --- generic fallback parser ----------------------------------------------
 
 
 def _extract_embedded_json(html: str) -> list[Any]:
@@ -312,7 +419,7 @@ def _event_from_dict(item: dict[str, Any]) -> dict[str, Any] | None:
 def _parse_time(value: str | None) -> datetime | None:
     if not value:
         return None
-    text = value.strip()
+    text = str(value).strip()
     if re.fullmatch(r"\d{13}", text):
         return datetime.fromtimestamp(int(text) / 1000, tz=timezone.utc)
     if re.fullmatch(r"\d{10}", text):
@@ -374,8 +481,34 @@ def _find_delivered_flag(payload: Any) -> bool:
     return False
 
 
+COURIER_KEYS = (
+    "courierName",
+    "courier_name",
+    "courier",
+    "carrierName",
+    "carrier_name",
+    "carrier",
+    "deliveryService",
+    "delivery_service",
+    "transportCompany",
+    "transport_company",
+)
+
+ETA_KEYS = (
+    "plannedDeliveryDate",
+    "planned_delivery_date",
+    "estimatedDeliveryDate",
+    "estimated_delivery_date",
+    "expectedDeliveryDate",
+    "expected_delivery_date",
+    "deliveryDateEstimate",
+    "deliveryDate",
+    "delivery_date",
+)
+
+
 def normalize_payload(payload: Any, tracking_number: str) -> dict[str, Any] | None:
-    """Reduce an arbitrary tracking payload to a stable, flat structure.
+    """Schema-tolerant fallback: reduce an arbitrary payload to a flat dict.
 
     Returns ``None`` when the payload does not look like tracking data at all.
     """
@@ -399,8 +532,12 @@ def normalize_payload(payload: Any, tracking_number: str) -> dict[str, Any] | No
     return {
         "tracking_number": tracking_number,
         "status": status,
+        "status_code": None,
         "delivered": delivered,
         "events": events[:20],
         "courier": _find_first_text(payload, COURIER_KEYS),
+        "delivery_type": None,
         "estimated_delivery": _find_first_text(payload, ETA_KEYS),
+        "delivery_date_begin": None,
+        "delivery_date_end": None,
     }
