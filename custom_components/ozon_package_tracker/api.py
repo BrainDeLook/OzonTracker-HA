@@ -235,7 +235,7 @@ class OzonTrackingApi:
     ) -> None:
         self._session = session
         self._cookie = (cookie or "").strip() or None
-        self._proxy_url = (proxy_url or "").strip().rstrip("/") or None
+        self._proxy_url = _normalize_proxy_url(proxy_url)
         self._warmed_up = False
         self._curl: Any | None = None
 
@@ -456,6 +456,20 @@ class OzonTrackingApi:
         if not payloads:
             raise OzonTrackingApiError("no embedded JSON found in HTML page")
         return payloads
+
+
+def _normalize_proxy_url(proxy_url: str | None) -> str | None:
+    """Clean up a user supplied proxy URL.
+
+    Accepts values with or without a scheme (e.g. ``192.168.1.10:8080``) and
+    defaults to ``http://`` so aiohttp does not reject a scheme-less URL.
+    """
+    url = (proxy_url or "").strip().rstrip("/")
+    if not url:
+        return None
+    if not url.startswith(("http://", "https://")):
+        url = f"http://{url}"
+    return url
 
 
 def _loads(text: str) -> Any:
