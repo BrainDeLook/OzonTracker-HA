@@ -38,19 +38,44 @@ from urllib.parse import quote
 
 import aiohttp
 
+try:
+    # curl_cffi impersonates a real Chrome TLS/JA3/HTTP2 fingerprint, which
+    # is what defeats Ozon's anti-bot "challenge" gate. It is a soft
+    # dependency: if it can not be imported we transparently fall back to
+    # aiohttp (which usually gets a 403 challenge).
+    from curl_cffi.requests import AsyncSession as _CurlAsyncSession
+
+    HAS_CURL_CFFI = True
+except ImportError:  # pragma: no cover - depends on install platform
+    _CurlAsyncSession = None
+    HAS_CURL_CFFI = False
+
 _LOGGER = logging.getLogger(__name__)
 
 API_ENDPOINT = "https://tracking.ozon.ru/p-api/ozon-track-bff/tracking/{tracking_number}"
 PAGE_URL = "https://tracking.ozon.ru/"
 
-REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
+TIMEOUT_SECONDS = 30
+REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=TIMEOUT_SECONDS)
 
-BROWSER_HEADERS = {
+# curl_cffi browser profile to impersonate. "chrome" tracks a recent Chrome.
+CURL_IMPERSONATE = "chrome"
+
+# Markers that identify Ozon's anti-bot challenge response.
+CHALLENGE_MARKERS = ("challengeURL", "challenge.html", "incidentId")
+
+# Headers common to every request. When curl_cffi impersonates a browser it
+# already sets User-Agent / sec-ch-ua* and the TLS fingerprint, so those are
+# kept separate (FINGERPRINT_HEADERS) and only added on the aiohttp path.
+COMMON_HEADERS = {
+    "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+}
+
+FINGERPRINT_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
     ),
-    "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
     "sec-ch-ua": '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
     "sec-ch-ua-mobile": "?0",
     "sec-ch-ua-platform": '"Windows"',
@@ -168,14 +193,27 @@ class OzonTrackingForbiddenError(OzonTrackingApiError):
     """Raised when the anti-bot protection answers with HTTP 403."""
 
 
+class OzonTrackingChallengeError(OzonTrackingForbiddenError):
+    """Raised when Ozon returns its JavaScript anti-bot challenge.
+
+    This can not be solved without either a real browser TLS fingerprint
+    (curl_cffi) or a user supplied Cookie captured from a browser.
+    """
+
+
+def _is_challenge(body: str) -> bool:
+    return any(marker in body for marker in CHALLENGE_MARKERS)
+
+
 class OzonTrackingApi:
     """Minimal async client for tracking.ozon.ru.
 
-    The session should have its own cookie jar: Ozon's anti-bot protection
-    hands out cookies that must be replayed on subsequent requests. An
-    optional user supplied ``Cookie`` header (copied from a real browser)
-    can be passed for installations where the automatic warm-up is not
-    enough to satisfy the protection.
+    Ozon protects the tracking endpoint with a JavaScript anti-bot challenge
+    that also fingerprints the TLS/HTTP2 handshake. To get past it the client
+    prefers a ``curl_cffi`` transport that impersonates Chrome's fingerprint;
+    if that library is unavailable it falls back to aiohttp. Either transport
+    keeps its own cookie jar, and an optional user supplied ``Cookie`` header
+    (copied from a logged-in browser) can be replayed on every request.
     """
 
     def __init__(
@@ -184,36 +222,72 @@ class OzonTrackingApi:
         self._session = session
         self._cookie = (cookie or "").strip() or None
         self._warmed_up = False
+        self._curl: Any | None = None
 
-    def _base_headers(self) -> dict[str, str]:
-        headers = dict(BROWSER_HEADERS)
+    @property
+    def uses_impersonation(self) -> bool:
+        return HAS_CURL_CFFI
+
+    async def async_close(self) -> None:
+        """Close the curl_cffi session, if one was created."""
+        if self._curl is not None:
+            try:
+                await self._curl.close()
+            except Exception:  # noqa: BLE001
+                pass
+            self._curl = None
+
+    def _headers(self, referer: str | None, *, page: bool) -> dict[str, str]:
+        headers = dict(COMMON_HEADERS)
+        if not HAS_CURL_CFFI:
+            # aiohttp does not fake a browser fingerprint, so add the header
+            # half of it manually. With curl_cffi impersonation these are set
+            # by the library and must not be overridden.
+            headers.update(FINGERPRINT_HEADERS)
+        if page:
+            headers.update(
+                {
+                    "Accept": (
+                        "text/html,application/xhtml+xml,application/xml;q=0.9,"
+                        "image/avif,image/webp,*/*;q=0.8"
+                    ),
+                    "Sec-Fetch-Site": "none",
+                    "Sec-Fetch-Mode": "navigate",
+                    "Sec-Fetch-Dest": "document",
+                    "Sec-Fetch-User": "?1",
+                    "Upgrade-Insecure-Requests": "1",
+                }
+            )
+        else:
+            headers.update(
+                {
+                    "Accept": "application/json, text/plain, */*",
+                    "Sec-Fetch-Site": "same-origin",
+                    "Sec-Fetch-Mode": "cors",
+                    "Sec-Fetch-Dest": "empty",
+                }
+            )
+        if referer:
+            headers["Referer"] = referer
         if self._cookie:
             headers["Cookie"] = self._cookie
         return headers
 
-    def _api_headers(self, referer: str) -> dict[str, str]:
-        return {
-            **self._base_headers(),
-            "Accept": "application/json, text/plain, */*",
-            "Referer": referer,
-            "Sec-Fetch-Site": "same-origin",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Dest": "empty",
-        }
-
-    def _page_headers(self) -> dict[str, str]:
-        return {
-            **self._base_headers(),
-            "Accept": (
-                "text/html,application/xhtml+xml,application/xml;q=0.9,"
-                "image/avif,image/webp,*/*;q=0.8"
-            ),
-            "Sec-Fetch-Site": "none",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-User": "?1",
-            "Upgrade-Insecure-Requests": "1",
-        }
+    async def _http_get(
+        self, url: str, headers: dict[str, str], params: dict[str, str] | None = None
+    ) -> tuple[int, str]:
+        """Perform a GET returning (status_code, body) via the best transport."""
+        if HAS_CURL_CFFI:
+            if self._curl is None:
+                self._curl = _CurlAsyncSession(
+                    impersonate=CURL_IMPERSONATE, timeout=TIMEOUT_SECONDS
+                )
+            resp = await self._curl.get(url, headers=headers, params=params)
+            return resp.status_code, resp.text
+        async with self._session.get(
+            url, headers=headers, params=params, timeout=REQUEST_TIMEOUT
+        ) as resp:
+            return resp.status, await resp.text()
 
     async def async_get_tracking(self, tracking_number: str) -> dict[str, Any]:
         """Fetch and normalize tracking info for a single tracking number."""
@@ -228,9 +302,7 @@ class OzonTrackingApi:
             payloads = await self._fetch_bff(track, referer)
         except OzonTrackingForbiddenError as err:
             if not self._warmed_up:
-                _LOGGER.debug(
-                    "Got 403 for %s, warming up cookies via tracking page", track
-                )
+                _LOGGER.debug("Got 403 for %s, warming up via tracking page", track)
                 await self._async_warm_up(track)
                 try:
                     payloads = await self._fetch_bff(track, referer)
@@ -265,14 +337,22 @@ class OzonTrackingApi:
         except OzonTrackingApiError as err:
             errors.append(f"page: {err}")
 
+        if any("challenge" in item.lower() for item in errors) and not self._cookie:
+            hint = (
+                " Ozon anti-bot challenge is blocking requests. "
+                "Set the 'Cookie' option (copy the cookie header from a "
+                "browser that opened tracking.ozon.ru)"
+            )
+            if not HAS_CURL_CFFI:
+                hint += "; the curl_cffi package is not installed"
+            errors.append(hint.strip())
+
         raise OzonTrackingApiError(
             f"Could not fetch tracking data for {track}: " + "; ".join(errors)
         )
 
     @staticmethod
-    def _parse_payloads(
-        payloads: list[Any], track: str
-    ) -> dict[str, Any] | None:
+    def _parse_payloads(payloads: list[Any], track: str) -> dict[str, Any] | None:
         for payload in payloads:
             normalized = parse_bff_payload(payload, track) or normalize_payload(
                 payload, track
@@ -285,46 +365,37 @@ class OzonTrackingApi:
         """Visit the tracking page once to pick up anti-bot cookies."""
         self._warmed_up = True
         try:
-            async with self._session.get(
-                PAGE_URL,
-                params={"track": track},
-                headers=self._page_headers(),
-                timeout=REQUEST_TIMEOUT,
-            ) as resp:
-                await resp.read()
-                _LOGGER.debug("Warm-up request returned HTTP %s", resp.status)
+            status, _ = await self._http_get(
+                PAGE_URL, self._headers(None, page=True), {"track": track}
+            )
+            _LOGGER.debug("Warm-up request returned HTTP %s", status)
             await asyncio.sleep(1.0)
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
             _LOGGER.debug("Warm-up request failed: %s", err)
 
     async def _fetch_bff(self, track: str, referer: str) -> list[Any]:
         url = API_ENDPOINT.format(tracking_number=quote(track, safe=""))
-        async with self._session.get(
-            url, headers=self._api_headers(referer), timeout=REQUEST_TIMEOUT
-        ) as resp:
-            if resp.status == 403:
-                snippet = (await resp.text())[:200]
-                raise OzonTrackingForbiddenError(
-                    f"HTTP 403 (anti-bot): {snippet!r}"
+        status, body = await self._http_get(url, self._headers(referer, page=False))
+        if status == 403:
+            if _is_challenge(body):
+                raise OzonTrackingChallengeError(
+                    f"HTTP 403 anti-bot challenge: {body[:160]!r}"
                 )
-            if resp.status == 404:
-                raise OzonTrackingApiError("HTTP 404: tracking number not found")
-            if resp.status != 200:
-                raise OzonTrackingApiError(f"HTTP {resp.status}")
-            text = await resp.text()
-        return [_loads(text)]
+            raise OzonTrackingForbiddenError(f"HTTP 403: {body[:160]!r}")
+        if status == 404:
+            raise OzonTrackingApiError("HTTP 404: tracking number not found")
+        if status != 200:
+            raise OzonTrackingApiError(f"HTTP {status}")
+        return [_loads(body)]
 
     async def _fetch_page(self, track: str) -> list[Any]:
-        async with self._session.get(
-            PAGE_URL,
-            params={"track": track},
-            headers=self._page_headers(),
-            timeout=REQUEST_TIMEOUT,
-        ) as resp:
-            if resp.status != 200:
-                snippet = (await resp.text())[:200]
-                raise OzonTrackingApiError(f"HTTP {resp.status}: {snippet!r}")
-            html = await resp.text()
+        status, html = await self._http_get(
+            PAGE_URL, self._headers(None, page=True), {"track": track}
+        )
+        if status != 200:
+            raise OzonTrackingApiError(f"HTTP {status}: {html[:160]!r}")
+        if _is_challenge(html):
+            raise OzonTrackingChallengeError("HTML page returned anti-bot challenge")
         payloads = _extract_embedded_json(html)
         if not payloads:
             raise OzonTrackingApiError("no embedded JSON found in HTML page")

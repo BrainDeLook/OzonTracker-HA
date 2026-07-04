@@ -70,6 +70,10 @@ class OzonPackageCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         stored = await self._store.async_load() or {}
         self._packages = stored.get("packages", {})
 
+    async def async_close(self) -> None:
+        """Release the API transport (curl_cffi session) on unload."""
+        await self._api.async_close()
+
     async def _async_save(self) -> None:
         await self._store.async_save({"packages": self._packages})
 
