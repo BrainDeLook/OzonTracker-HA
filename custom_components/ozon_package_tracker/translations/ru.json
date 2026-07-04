@@ -14,12 +14,14 @@
     "step": {
       "init": {
         "data": {
+          "proxy_url": "URL headless-браузер прокси (рекомендуется)",
           "update_interval": "Интервал обновления (минуты)",
           "auto_delete_days": "Удалять доставленные посылки через (дней, 0 = никогда)",
-          "cookie": "Заголовок Cookie (необязательно)"
+          "cookie": "Заголовок Cookie (запасной вариант, необязательно)"
         },
         "data_description": {
-          "cookie": "Если обновления падают с ошибкой HTTP 403: откройте tracking.ozon.ru в браузере, в DevTools (вкладка Network) скопируйте заголовок запроса 'cookie' и вставьте его сюда."
+          "proxy_url": "Адрес сервиса ozon-tracker-proxy, который решает antibot-challenge, напр. http://homeassistant.local:8080. Оставьте пустым, чтобы обращаться к Ozon напрямую.",
+          "cookie": "Крайний запасной вариант, если прокси не используется: откройте tracking.ozon.ru в браузере, в DevTools (вкладка Network) скопируйте заголовок запроса 'cookie' и вставьте сюда."
         }
       }
     }

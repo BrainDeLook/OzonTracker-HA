@@ -23,6 +23,7 @@ from .const import (
     ATTR_TRACKING_NUMBER,
     CARD_FILENAME,
     CONF_COOKIE,
+    CONF_PROXY_URL,
     DOMAIN,
     FRONTEND_URL_BASE,
     PLATFORMS,
@@ -74,7 +75,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Dedicated session with its own cookie jar: Ozon's anti-bot protection
     # hands out cookies that must be replayed on subsequent requests.
     session = async_create_clientsession(hass)
-    api = OzonTrackingApi(session, entry.options.get(CONF_COOKIE))
+    api = OzonTrackingApi(
+        session,
+        cookie=entry.options.get(CONF_COOKIE),
+        proxy_url=entry.options.get(CONF_PROXY_URL),
+    )
     coordinator = OzonPackageCoordinator(hass, entry, api)
     await coordinator.async_load_store()
     await coordinator.async_config_entry_first_refresh()

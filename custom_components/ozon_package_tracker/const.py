@@ -11,6 +11,7 @@ STORAGE_VERSION = 1
 CONF_UPDATE_INTERVAL = "update_interval"
 CONF_AUTO_DELETE_DAYS = "auto_delete_days"
 CONF_COOKIE = "cookie"
+CONF_PROXY_URL = "proxy_url"
 
 DEFAULT_UPDATE_INTERVAL = 30  # minutes
 DEFAULT_AUTO_DELETE_DAYS = 0  # 0 = keep delivered packages forever

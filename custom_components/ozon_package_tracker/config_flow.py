@@ -18,6 +18,7 @@ from homeassistant.helpers import selector
 from .const import (
     CONF_AUTO_DELETE_DAYS,
     CONF_COOKIE,
+    CONF_PROXY_URL,
     CONF_UPDATE_INTERVAL,
     DEFAULT_AUTO_DELETE_DAYS,
     DEFAULT_UPDATE_INTERVAL,
@@ -57,6 +58,12 @@ class OzonPackageTrackerOptionsFlow(OptionsFlow):
         options = self.config_entry.options
         schema = vol.Schema(
             {
+                vol.Optional(
+                    CONF_PROXY_URL,
+                    description={"suggested_value": options.get(CONF_PROXY_URL, "")},
+                ): selector.TextSelector(
+                    selector.TextSelectorConfig(type=selector.TextSelectorType.URL)
+                ),
                 vol.Optional(
                     CONF_UPDATE_INTERVAL,
                     default=options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL),

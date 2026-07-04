@@ -119,35 +119,57 @@ automation:
   домашнего российского подключения проблем обычно нет; при работе HA через
   зарубежный VPN трекинг может отдавать `403`.
 
-### Ошибка HTTP 403 (антибот)
+### Обход антибота (важно): headless-браузер прокси
 
-Tracking.ozon.ru закрыт антибот-защитой: если запрос не похож на её
-собственное веб-приложение, сервер отдаёт `403` с JavaScript-challenge
-(в теле видны `challengeURL` / `challenge.html` / `incidentId`). Разбор
-реального HAR показал, что **куки для успешного запроса не нужны вообще** —
-решают заголовки. Интеграция шлёт их автоматически:
+Tracking.ozon.ru закрыт антибот-защитой с **JavaScript-challenge**
+(`fab_ichlg`; в теле 403 видны `challengeURL` / `incidentId`). Токен доступа
+вычисляется JavaScript'ом и кладётся в куку — получить его можно **только
+выполнив этот JS в настоящем браузере**. Ни правильные заголовки, ни имитация
+TLS (`curl_cffi`) challenge не решают, а вставленная вручную кука протухает
+через часы-сутки.
 
-1. **Заголовки приложения** — `x-o3-app-name` и `x-o3-app-version` плюс
-   актуальный Chrome в `user-agent`/`sec-ch-ua`. Именно их отсутствие
-   вызывало `403`. Это основной механизм, и он не «протухает».
-2. **Имитация TLS-отпечатка Chrome через `curl_cffi`** — на случай, если
-   антибот проверяет ещё и отпечаток соединения. Библиотека ставится
-   автоматически (прописана в зависимостях); если её нет, интеграция
-   откатывается на обычный HTTP-клиент.
-3. **Ручные куки браузера** — крайний запасной вариант, обычно не нужен:
-   *Настройки → Устройства и службы → Ozon Package Tracker → Настроить* →
-   поле **«Заголовок Cookie»** (значение заголовка `cookie` из DevTools →
-   Network).
+Поэтому рекомендуемый способ — поднять рядом с Home Assistant крошечный
+сервис **`ozon-tracker-proxy`** (папка [`ozon-tracker-proxy/`](ozon-tracker-proxy)):
+он держит headless-Chromium (Playwright), сам проходит challenge, обновляет
+куки в фоне и отдаёт интеграции готовый JSON. Вставлять куки руками больше не
+нужно.
+
+**Запуск через Docker Compose:**
+
+```bash
+cd ozon-tracker-proxy
+docker compose up -d --build
+# проверка: должно вернуть {"status": "ok"}
+curl http://localhost:8080/healthz
+```
+
+Затем в HA: *Настройки → Устройства и службы → Ozon Package Tracker →
+Настроить* → в поле **«URL headless-браузер прокси»** укажите адрес сервиса,
+напр. `http://homeassistant.local:8080` (или IP хоста с Docker). Всё —
+интеграция будет ходить через прокси, антибот больше не мешает.
+
+Требования: ~350–500 МБ RAM под Chromium; хост, где можно запускать Docker
+(обычный Linux/NAS/мини-ПК). На «чистой» Home Assistant OS без возможности
+запускать контейнеры используйте отдельную машину в той же сети.
+
+### Без прокси (запасные варианты)
+
+Если прокси не используется, интеграция обращается к Ozon напрямую и пытается
+обойти защиту заголовками приложения (`x-o3-app-name` / `x-o3-app-version` +
+актуальный Chrome) и имитацией TLS через `curl_cffi`. Этого **может не
+хватить** — тогда как крайний вариант вставьте куку браузера в поле
+**«Заголовок Cookie»** (DevTools → Network → заголовок `cookie`); учтите, что
+она протухает и её придётся периодически обновлять.
 
 Примечания:
 
-- Если через несколько месяцев `403` вернётся, Ozon мог поднять версию
-  приложения — обновите строку `x-o3-app-version` в
-  `custom_components/ozon_package_tracker/api.py` (значение видно в DevTools
-  → Network → любой запрос к `/p-api/…` → Request Headers).
-- Убедитесь, что HA выходит в интернет с российского IP (не через
+- Если через несколько месяцев `403` вернётся при прямом доступе, Ozon мог
+  поднять версию приложения — обновите `x-o3-app-version` в
+  `custom_components/ozon_package_tracker/api.py` (и в `ozon-tracker-proxy`
+  через переменную `OZON_APP_VERSION`).
+- Убедитесь, что HA/прокси выходят в интернет с российского IP (не через
   зарубежный VPN/VPS): при зарубежном адресе антибот может блокировать
-  запрос независимо от заголовков.
+  запрос независимо от способа.
 - Трек-номер — это номер отправления Ozon вида `33310100-0168-1`
   (виден на странице заказа и на [tracking.ozon.ru](https://tracking.ozon.ru/)).
 
@@ -167,6 +189,11 @@ and removing them. Inspired by
   `type: custom:ozon-package-card`.
 - Services: `add_tracking`, `remove_tracking`, `edit_title`, `refresh`.
 - `ozon_package_tracker_data_updated` event fires on status changes.
+- Ozon guards the endpoint with a JavaScript anti-bot challenge. The
+  recommended way around it is the bundled [`ozon-tracker-proxy`](ozon-tracker-proxy)
+  service — a headless Chromium (Playwright) that solves the challenge,
+  auto-refreshes cookies and serves the tracking JSON to the integration.
+  Set its URL in the integration options.
 - Note: the endpoint is unofficial and Ozon geo-blocks non-Russian /
-  datacenter IPs, so the integration is expected to run from a Russian
+  datacenter IPs, so the integration/proxy is expected to run from a Russian
   residential connection.

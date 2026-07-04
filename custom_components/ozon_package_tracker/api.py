@@ -228,16 +228,24 @@ class OzonTrackingApi:
     """
 
     def __init__(
-        self, session: aiohttp.ClientSession, cookie: str | None = None
+        self,
+        session: aiohttp.ClientSession,
+        cookie: str | None = None,
+        proxy_url: str | None = None,
     ) -> None:
         self._session = session
         self._cookie = (cookie or "").strip() or None
+        self._proxy_url = (proxy_url or "").strip().rstrip("/") or None
         self._warmed_up = False
         self._curl: Any | None = None
 
     @property
     def uses_impersonation(self) -> bool:
         return HAS_CURL_CFFI
+
+    @property
+    def uses_proxy(self) -> bool:
+        return self._proxy_url is not None
 
     async def async_close(self) -> None:
         """Close the curl_cffi session, if one was created."""
@@ -305,6 +313,12 @@ class OzonTrackingApi:
     async def async_get_tracking(self, tracking_number: str) -> dict[str, Any]:
         """Fetch and normalize tracking info for a single tracking number."""
         track = tracking_number.strip()
+
+        # When a headless-browser proxy is configured, it handles the anti-bot
+        # challenge for us; use it exclusively and skip the direct path.
+        if self._proxy_url is not None:
+            return await self._get_via_proxy(track)
+
         referer = f"{PAGE_URL}?track={track}"
         errors: list[str] = []
 
@@ -363,6 +377,35 @@ class OzonTrackingApi:
         raise OzonTrackingApiError(
             f"Could not fetch tracking data for {track}: " + "; ".join(errors)
         )
+
+    async def _get_via_proxy(self, track: str) -> dict[str, Any]:
+        """Fetch tracking data from the companion headless-browser proxy.
+
+        The proxy returns the raw Ozon BFF JSON, so the same parser applies.
+        """
+        url = f"{self._proxy_url}/track/{quote(track, safe='')}"
+        try:
+            async with self._session.get(url, timeout=REQUEST_TIMEOUT) as resp:
+                body = await resp.text()
+                status = resp.status
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            raise OzonTrackingApiError(
+                f"Could not reach the Ozon tracking proxy at {self._proxy_url}: "
+                f"{err.__class__.__name__}: {err}"
+            ) from err
+
+        if status == 404:
+            raise OzonTrackingApiError(f"HTTP 404: tracking number {track} not found")
+        if status != 200:
+            raise OzonTrackingApiError(
+                f"Ozon tracking proxy returned HTTP {status}: {body[:160]!r}"
+            )
+        normalized = self._parse_payloads([_loads(body)], track)
+        if normalized is None:
+            raise OzonTrackingApiError(
+                f"Proxy returned an unrecognized payload for {track}"
+            )
+        return normalized
 
     @staticmethod
     def _parse_payloads(payloads: list[Any], track: str) -> dict[str, Any] | None:
