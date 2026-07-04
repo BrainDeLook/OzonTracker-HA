@@ -1,0 +1,43 @@
+add_tracking:
+  fields:
+    tracking_number:
+      required: true
+      example: "33310100-0168-1"
+      selector:
+        text:
+    title:
+      required: false
+      example: "Наушники"
+      selector:
+        text:
+
+remove_tracking:
+  fields:
+    tracking_number:
+      required: false
+      example: "33310100-0168-1"
+      selector:
+        text:
+    entity_id:
+      required: false
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - integration: ozon_package_tracker
+              domain: sensor
+
+edit_title:
+  fields:
+    tracking_number:
+      required: true
+      example: "33310100-0168-1"
+      selector:
+        text:
+    title:
+      required: true
+      example: "Наушники"
+      selector:
+        text:
+
+refresh: {}

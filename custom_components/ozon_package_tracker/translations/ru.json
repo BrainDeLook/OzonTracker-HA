@@ -1,0 +1,71 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Ozon Package Tracker",
+        "description": "Отслеживание посылок Ozon через tracking.ozon.ru. Посылки добавляются позже через сервис ozon_package_tracker.add_tracking или из встроенной карточки Lovelace."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Уже настроено. Допускается только один экземпляр интеграции."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "update_interval": "Интервал обновления (минуты)",
+          "auto_delete_days": "Удалять доставленные посылки через (дней, 0 = никогда)"
+        }
+      }
+    }
+  },
+  "services": {
+    "add_tracking": {
+      "name": "Добавить посылку",
+      "description": "Начать отслеживание посылки Ozon.",
+      "fields": {
+        "tracking_number": {
+          "name": "Трек-номер",
+          "description": "Трек-номер Ozon, например 33310100-0168-1."
+        },
+        "title": {
+          "name": "Название",
+          "description": "Понятное название посылки."
+        }
+      }
+    },
+    "remove_tracking": {
+      "name": "Удалить посылку",
+      "description": "Прекратить отслеживание по трек-номеру или по сущности.",
+      "fields": {
+        "tracking_number": {
+          "name": "Трек-номер",
+          "description": "Трек-номер для удаления."
+        },
+        "entity_id": {
+          "name": "Сущности",
+          "description": "Сенсоры посылок для удаления."
+        }
+      }
+    },
+    "edit_title": {
+      "name": "Переименовать посылку",
+      "description": "Изменить название отслеживаемой посылки.",
+      "fields": {
+        "tracking_number": {
+          "name": "Трек-номер",
+          "description": "Трек-номер посылки."
+        },
+        "title": {
+          "name": "Название",
+          "description": "Новое название."
+        }
+      }
+    },
+    "refresh": {
+      "name": "Обновить",
+      "description": "Обновить данные всех посылок прямо сейчас."
+    }
+  }
+}

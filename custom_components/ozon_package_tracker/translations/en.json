@@ -1,0 +1,71 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Ozon Package Tracker",
+        "description": "Track Ozon marketplace packages via tracking.ozon.ru. Packages are added later with the ozon_package_tracker.add_tracking service or from the bundled Lovelace card."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Already configured. Only a single instance is allowed."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "update_interval": "Update interval (minutes)",
+          "auto_delete_days": "Auto-delete delivered packages after (days, 0 = never)"
+        }
+      }
+    }
+  },
+  "services": {
+    "add_tracking": {
+      "name": "Add tracking",
+      "description": "Start tracking an Ozon package.",
+      "fields": {
+        "tracking_number": {
+          "name": "Tracking number",
+          "description": "Ozon tracking number, e.g. 33310100-0168-1."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Friendly name of the package."
+        }
+      }
+    },
+    "remove_tracking": {
+      "name": "Remove tracking",
+      "description": "Stop tracking a package by tracking number or by entity.",
+      "fields": {
+        "tracking_number": {
+          "name": "Tracking number",
+          "description": "Tracking number to remove."
+        },
+        "entity_id": {
+          "name": "Entities",
+          "description": "Package sensors to remove."
+        }
+      }
+    },
+    "edit_title": {
+      "name": "Edit title",
+      "description": "Rename a tracked package.",
+      "fields": {
+        "tracking_number": {
+          "name": "Tracking number",
+          "description": "Tracking number of the package."
+        },
+        "title": {
+          "name": "Title",
+          "description": "New friendly name."
+        }
+      }
+    },
+    "refresh": {
+      "name": "Refresh",
+      "description": "Refresh tracking data for all packages now."
+    }
+  }
+}
