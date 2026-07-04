@@ -1,2 +1,6 @@
+# NOTE: Playwright and Chromium are already provided (at matching versions)
+# by the mcr.microsoft.com/playwright/python base image — do NOT install or
+# upgrade playwright here, or pip will pull a version whose browser build is
+# missing from the image ("Executable doesn't exist"). Only extra runtime
+# deps belong here.
 aiohttp>=3.9
-playwright>=1.48

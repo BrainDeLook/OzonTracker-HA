@@ -34,10 +34,15 @@ Then set the integration's **Headless-browser proxy URL** option to
 
 ## Run without Docker
 
+Outside the Playwright base image you must install Playwright yourself and
+download its Chromium (inside Docker both are already provided by the base
+image, so `requirements.txt` deliberately omits Playwright):
+
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt          # aiohttp
+pip install playwright
 playwright install --with-deps chromium
-python app.py                                # listens on :8080
+python app.py                            # listens on :8080
 ```
 
 ## Configuration (environment variables)
