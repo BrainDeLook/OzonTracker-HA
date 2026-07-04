@@ -44,19 +44,18 @@ BASE = "https://tracking.ozon.ru"
 BFF_URL = BASE + "/p-api/ozon-track-bff/tracking/{track}"
 PAGE_URL = BASE + "/?track={track}"
 
-USER_AGENT = os.environ.get(
-    "OZON_USER_AGENT",
+USER_AGENT = os.environ.get("OZON_USER_AGENT") or (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
 )
 APP_HEADERS = {
     "x-o3-app-name": "tpl-ui-ozon-track",
-    "x-o3-app-version": os.environ.get("OZON_APP_VERSION", "release/TPLAPI-5269"),
+    "x-o3-app-version": os.environ.get("OZON_APP_VERSION") or "release/TPLAPI-5269",
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "ru,en;q=0.9",
 }
 
-NAV_TIMEOUT = int(os.environ.get("OZON_NAV_TIMEOUT_MS", "60000"))
+NAV_TIMEOUT = int(os.environ.get("OZON_NAV_TIMEOUT_MS") or "60000")
 # How long a solved session is trusted before we re-verify via a full page
 # navigation. A direct context request is attempted first regardless.
 PORT = int(os.environ.get("PORT", "8080"))

@@ -1,0 +1,28 @@
+name: Ozon Tracker Proxy
+version: "0.6.0"
+slug: ozon_tracker_proxy
+description: >-
+  Headless-browser proxy that solves the tracking.ozon.ru anti-bot challenge
+  for the Ozon Package Tracker integration.
+url: https://github.com/BrainDeLook/OzonTracker-HA/tree/main/ozon-tracker-proxy
+# Playwright/Chromium is only available for amd64 and aarch64.
+arch:
+  - amd64
+  - aarch64
+# The Playwright base image ships its own runtime, not s6-overlay.
+init: false
+boot: auto
+startup: services
+ports:
+  8080/tcp: 8080
+ports_description:
+  8080/tcp: Tracking proxy HTTP API (point the integration here)
+webui: "http://[HOST]:[PORT:8080]/healthz"
+options:
+  log_level: info
+  app_version: release/TPLAPI-5269
+  nav_timeout_ms: 60000
+schema:
+  log_level: list(trace|debug|info|notice|warning|error|fatal)?
+  app_version: str?
+  nav_timeout_ms: int(10000,180000)?

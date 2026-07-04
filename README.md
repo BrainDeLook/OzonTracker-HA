@@ -128,29 +128,39 @@ Tracking.ozon.ru закрыт антибот-защитой с **JavaScript-chal
 TLS (`curl_cffi`) challenge не решают, а вставленная вручную кука протухает
 через часы-сутки.
 
-Поэтому рекомендуемый способ — поднять рядом с Home Assistant крошечный
-сервис **`ozon-tracker-proxy`** (папка [`ozon-tracker-proxy/`](ozon-tracker-proxy)):
-он держит headless-Chromium (Playwright), сам проходит challenge, обновляет
+Поэтому рекомендуемый способ — поднять рядом с Home Assistant дополнение
+**`ozon-tracker-proxy`** (папка [`ozon-tracker-proxy/`](ozon-tracker-proxy)):
+оно держит headless-Chromium (Playwright), само проходит challenge, обновляет
 куки в фоне и отдаёт интеграции готовый JSON. Вставлять куки руками больше не
 нужно.
 
-**Запуск через Docker Compose:**
+**Способ A — Home Assistant Add-on (рекомендуется для HAOS/Supervised):**
+
+1. *Настройки → Дополнения → Магазин дополнений* → меню **⋮** →
+   **Репозитории** → добавьте
+   `https://github.com/BrainDeLook/OzonTracker-HA`.
+2. Установите дополнение **«Ozon Tracker Proxy»**, запустите, включите
+   «Запускать при загрузке» и «Watchdog».
+3. В опциях интеграции укажите **URL прокси** = `http://<IP-HA>:8080`.
+
+> Поддерживаются только архитектуры **amd64** и **aarch64** — Chromium от
+> Playwright не собирается под armv7/armhf (старые Raspberry Pi).
+
+**Способ B — Docker Compose (для обычного Docker/NAS/мини-ПК):**
 
 ```bash
 cd ozon-tracker-proxy
 docker compose up -d --build
-# проверка: должно вернуть {"status": "ok"}
-curl http://localhost:8080/healthz
+curl http://localhost:8080/healthz          # {"status": "ok"}
 ```
 
 Затем в HA: *Настройки → Устройства и службы → Ozon Package Tracker →
 Настроить* → в поле **«URL headless-браузер прокси»** укажите адрес сервиса,
-напр. `http://homeassistant.local:8080` (или IP хоста с Docker). Всё —
-интеграция будет ходить через прокси, антибот больше не мешает.
+напр. `http://homeassistant.local:8080` (или IP хоста с Docker).
 
-Требования: ~350–500 МБ RAM под Chromium; хост, где можно запускать Docker
-(обычный Linux/NAS/мини-ПК). На «чистой» Home Assistant OS без возможности
-запускать контейнеры используйте отдельную машину в той же сети.
+Требования: ~350–500 МБ RAM под Chromium. На «чистой» Home Assistant OS без
+поддерживаемой архитектуры используйте способ B на отдельной машине в той же
+сети. Подробности и опции — в [`ozon-tracker-proxy/DOCS.md`](ozon-tracker-proxy/DOCS.md).
 
 ### Без прокси (запасные варианты)
 
