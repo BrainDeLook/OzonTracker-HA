@@ -1,6 +1,9 @@
-# NOTE: Playwright and Chromium are already provided (at matching versions)
-# by the mcr.microsoft.com/playwright/python base image — do NOT install or
-# upgrade playwright here, or pip will pull a version whose browser build is
-# missing from the image ("Executable doesn't exist"). Only extra runtime
-# deps belong here.
+# IMPORTANT: the playwright version MUST match the base image tag in
+# build.yaml / Dockerfile (mcr.microsoft.com/playwright/python:vX.Y.Z-jammy),
+# because that image ships the Chromium build for exactly that playwright
+# version under /ms-playwright. Pin them together:
+#   base image v1.48.0-jammy  <->  playwright==1.48.0
+# A looser spec (e.g. >=1.48) lets pip upgrade playwright to a version whose
+# browser build is absent from the image -> "Executable doesn't exist".
 aiohttp>=3.9
+playwright==1.48.0
