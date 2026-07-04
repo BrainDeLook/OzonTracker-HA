@@ -13,9 +13,11 @@ from homeassistant.config_entries import (
     OptionsFlow,
 )
 from homeassistant.core import callback
+from homeassistant.helpers import selector
 
 from .const import (
     CONF_AUTO_DELETE_DAYS,
+    CONF_COOKIE,
     CONF_UPDATE_INTERVAL,
     DEFAULT_AUTO_DELETE_DAYS,
     DEFAULT_UPDATE_INTERVAL,
@@ -65,6 +67,12 @@ class OzonPackageTrackerOptionsFlow(OptionsFlow):
                         CONF_AUTO_DELETE_DAYS, DEFAULT_AUTO_DELETE_DAYS
                     ),
                 ): vol.All(vol.Coerce(int), vol.Range(min=0, max=90)),
+                vol.Optional(
+                    CONF_COOKIE,
+                    description={"suggested_value": options.get(CONF_COOKIE, "")},
+                ): selector.TextSelector(
+                    selector.TextSelectorConfig(multiline=True)
+                ),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

@@ -51,6 +51,9 @@ BROWSER_HEADERS = {
         "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
     ),
     "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+    "sec-ch-ua": '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
 }
 
 # Human readable (Russian) names for the BFF event codes. Unknown codes are
@@ -161,11 +164,56 @@ class OzonTrackingApiError(Exception):
     """Raised when tracking data can not be fetched or understood."""
 
 
-class OzonTrackingApi:
-    """Minimal async client for tracking.ozon.ru."""
+class OzonTrackingForbiddenError(OzonTrackingApiError):
+    """Raised when the anti-bot protection answers with HTTP 403."""
 
-    def __init__(self, session: aiohttp.ClientSession) -> None:
+
+class OzonTrackingApi:
+    """Minimal async client for tracking.ozon.ru.
+
+    The session should have its own cookie jar: Ozon's anti-bot protection
+    hands out cookies that must be replayed on subsequent requests. An
+    optional user supplied ``Cookie`` header (copied from a real browser)
+    can be passed for installations where the automatic warm-up is not
+    enough to satisfy the protection.
+    """
+
+    def __init__(
+        self, session: aiohttp.ClientSession, cookie: str | None = None
+    ) -> None:
         self._session = session
+        self._cookie = (cookie or "").strip() or None
+        self._warmed_up = False
+
+    def _base_headers(self) -> dict[str, str]:
+        headers = dict(BROWSER_HEADERS)
+        if self._cookie:
+            headers["Cookie"] = self._cookie
+        return headers
+
+    def _api_headers(self, referer: str) -> dict[str, str]:
+        return {
+            **self._base_headers(),
+            "Accept": "application/json, text/plain, */*",
+            "Referer": referer,
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Dest": "empty",
+        }
+
+    def _page_headers(self) -> dict[str, str]:
+        return {
+            **self._base_headers(),
+            "Accept": (
+                "text/html,application/xhtml+xml,application/xml;q=0.9,"
+                "image/avif,image/webp,*/*;q=0.8"
+            ),
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+        }
 
     async def async_get_tracking(self, tracking_number: str) -> dict[str, Any]:
         """Fetch and normalize tracking info for a single tracking number."""
@@ -173,41 +221,92 @@ class OzonTrackingApi:
         referer = f"{PAGE_URL}?track={track}"
         errors: list[str] = []
 
-        attempts = (
-            ("bff-api", self._fetch_bff),
-            ("page", self._fetch_page),
-        )
-        for name, attempt in attempts:
-            try:
-                payloads = await attempt(track, referer)
-            except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-                errors.append(f"{name}: {err.__class__.__name__}: {err}")
-                continue
-            except OzonTrackingApiError as err:
-                errors.append(f"{name}: {err}")
-                continue
-            for payload in payloads:
-                normalized = parse_bff_payload(payload, track) or normalize_payload(
-                    payload, track
+        # Primary: the BFF JSON endpoint. On a 403 visit the tracking page
+        # once to collect anti-bot cookies into the session jar and retry.
+        payloads: list[Any] | None = None
+        try:
+            payloads = await self._fetch_bff(track, referer)
+        except OzonTrackingForbiddenError as err:
+            if not self._warmed_up:
+                _LOGGER.debug(
+                    "Got 403 for %s, warming up cookies via tracking page", track
                 )
-                if normalized is not None:
-                    return normalized
-            errors.append(f"{name}: unrecognized payload structure")
+                await self._async_warm_up(track)
+                try:
+                    payloads = await self._fetch_bff(track, referer)
+                except (
+                    OzonTrackingApiError,
+                    aiohttp.ClientError,
+                    asyncio.TimeoutError,
+                ) as retry_err:
+                    errors.append(f"bff-api (after warm-up): {retry_err}")
+            else:
+                errors.append(f"bff-api: {err}")
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            errors.append(f"bff-api: {err.__class__.__name__}: {err}")
+        except OzonTrackingApiError as err:
+            errors.append(f"bff-api: {err}")
+
+        if payloads is not None:
+            normalized = self._parse_payloads(payloads, track)
+            if normalized is not None:
+                return normalized
+            errors.append("bff-api: unrecognized payload structure")
+
+        # Fallback: scrape JSON embedded into the HTML page.
+        try:
+            payloads = await self._fetch_page(track)
+            normalized = self._parse_payloads(payloads, track)
+            if normalized is not None:
+                return normalized
+            errors.append("page: unrecognized payload structure")
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            errors.append(f"page: {err.__class__.__name__}: {err}")
+        except OzonTrackingApiError as err:
+            errors.append(f"page: {err}")
 
         raise OzonTrackingApiError(
             f"Could not fetch tracking data for {track}: " + "; ".join(errors)
         )
 
+    @staticmethod
+    def _parse_payloads(
+        payloads: list[Any], track: str
+    ) -> dict[str, Any] | None:
+        for payload in payloads:
+            normalized = parse_bff_payload(payload, track) or normalize_payload(
+                payload, track
+            )
+            if normalized is not None:
+                return normalized
+        return None
+
+    async def _async_warm_up(self, track: str) -> None:
+        """Visit the tracking page once to pick up anti-bot cookies."""
+        self._warmed_up = True
+        try:
+            async with self._session.get(
+                PAGE_URL,
+                params={"track": track},
+                headers=self._page_headers(),
+                timeout=REQUEST_TIMEOUT,
+            ) as resp:
+                await resp.read()
+                _LOGGER.debug("Warm-up request returned HTTP %s", resp.status)
+            await asyncio.sleep(1.0)
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            _LOGGER.debug("Warm-up request failed: %s", err)
+
     async def _fetch_bff(self, track: str, referer: str) -> list[Any]:
         url = API_ENDPOINT.format(tracking_number=quote(track, safe=""))
-        headers = {
-            **BROWSER_HEADERS,
-            "Accept": "application/json, text/plain, */*",
-            "Referer": referer,
-        }
         async with self._session.get(
-            url, headers=headers, timeout=REQUEST_TIMEOUT
+            url, headers=self._api_headers(referer), timeout=REQUEST_TIMEOUT
         ) as resp:
+            if resp.status == 403:
+                snippet = (await resp.text())[:200]
+                raise OzonTrackingForbiddenError(
+                    f"HTTP 403 (anti-bot): {snippet!r}"
+                )
             if resp.status == 404:
                 raise OzonTrackingApiError("HTTP 404: tracking number not found")
             if resp.status != 200:
@@ -215,19 +314,16 @@ class OzonTrackingApi:
             text = await resp.text()
         return [_loads(text)]
 
-    async def _fetch_page(self, track: str, referer: str) -> list[Any]:
-        headers = {
-            **BROWSER_HEADERS,
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        }
+    async def _fetch_page(self, track: str) -> list[Any]:
         async with self._session.get(
             PAGE_URL,
             params={"track": track},
-            headers=headers,
+            headers=self._page_headers(),
             timeout=REQUEST_TIMEOUT,
         ) as resp:
             if resp.status != 200:
-                raise OzonTrackingApiError(f"HTTP {resp.status}")
+                snippet = (await resp.text())[:200]
+                raise OzonTrackingApiError(f"HTTP {resp.status}: {snippet!r}")
             html = await resp.text()
         payloads = _extract_embedded_json(html)
         if not payloads:

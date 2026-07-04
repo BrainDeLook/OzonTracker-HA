@@ -12,7 +12,7 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState, HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 
@@ -22,6 +22,7 @@ from .const import (
     ATTR_TITLE,
     ATTR_TRACKING_NUMBER,
     CARD_FILENAME,
+    CONF_COOKIE,
     DOMAIN,
     FRONTEND_URL_BASE,
     PLATFORMS,
@@ -70,7 +71,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Ozon Package Tracker from a config entry."""
-    api = OzonTrackingApi(async_get_clientsession(hass))
+    # Dedicated session with its own cookie jar: Ozon's anti-bot protection
+    # hands out cookies that must be replayed on subsequent requests.
+    session = async_create_clientsession(hass)
+    api = OzonTrackingApi(session, entry.options.get(CONF_COOKIE))
     coordinator = OzonPackageCoordinator(hass, entry, api)
     await coordinator.async_load_store()
     await coordinator.async_config_entry_first_refresh()
