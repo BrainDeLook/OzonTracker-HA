@@ -68,17 +68,26 @@ CHALLENGE_MARKERS = ("challengeURL", "challenge.html", "incidentId")
 # already sets User-Agent / sec-ch-ua* and the TLS fingerprint, so those are
 # kept separate (FINGERPRINT_HEADERS) and only added on the aiohttp path.
 COMMON_HEADERS = {
-    "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Accept-Language": "ru,en;q=0.9",
 }
 
 FINGERPRINT_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+        "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
     ),
-    "sec-ch-ua": '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
+    "sec-ch-ua": '"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
     "sec-ch-ua-mobile": "?0",
     "sec-ch-ua-platform": '"Windows"',
+}
+
+# Application headers the Ozon tracking web app (Nuxt) sends on its API
+# (XHR) calls. Their absence is what triggers the anti-bot 403 challenge,
+# so these are the important part of the fix. Captured from a real session;
+# update the version string if Ozon starts rejecting it.
+APP_HEADERS = {
+    "x-o3-app-name": "tpl-ui-ozon-track",
+    "x-o3-app-version": "release/TPLAPI-5269",
 }
 
 # Human readable (Russian) names for the BFF event codes. Unknown codes are
@@ -208,12 +217,14 @@ def _is_challenge(body: str) -> bool:
 class OzonTrackingApi:
     """Minimal async client for tracking.ozon.ru.
 
-    Ozon protects the tracking endpoint with a JavaScript anti-bot challenge
-    that also fingerprints the TLS/HTTP2 handshake. To get past it the client
-    prefers a ``curl_cffi`` transport that impersonates Chrome's fingerprint;
-    if that library is unavailable it falls back to aiohttp. Either transport
-    keeps its own cookie jar, and an optional user supplied ``Cookie`` header
-    (copied from a logged-in browser) can be replayed on every request.
+    Ozon answers the anti-bot 403 challenge when a request does not look like
+    its own web app. The decisive part (confirmed from a captured HAR) is the
+    ``x-o3-app-name`` / ``x-o3-app-version`` application headers together with
+    a current Chrome User-Agent — a working request needs no cookies at all.
+    On top of that the client prefers a ``curl_cffi`` transport that also
+    impersonates Chrome's TLS/HTTP2 fingerprint (falling back to aiohttp), and
+    an optional user supplied ``Cookie`` header can still be replayed as a
+    last-resort fallback.
     """
 
     def __init__(
@@ -262,9 +273,11 @@ class OzonTrackingApi:
             headers.update(
                 {
                     "Accept": "application/json, text/plain, */*",
+                    "priority": "u=1, i",
                     "Sec-Fetch-Site": "same-origin",
                     "Sec-Fetch-Mode": "cors",
                     "Sec-Fetch-Dest": "empty",
+                    **APP_HEADERS,
                 }
             )
         if referer:
