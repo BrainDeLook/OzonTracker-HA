@@ -7,9 +7,9 @@ WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-# Install the patched Chromium patchright drives. The base image already has
-# all the system libraries, so no --with-deps is needed.
-RUN patchright install chromium
+# Install the patched Chromium patchright drives, plus any system libraries it
+# needs on top of the base image (--with-deps uses apt at build time).
+RUN patchright install --with-deps chromium
 
 COPY app.py run.sh ./
 RUN chmod a+x run.sh

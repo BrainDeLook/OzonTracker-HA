@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import random
 import time
 from typing import Any
 from urllib.parse import quote
@@ -62,6 +63,9 @@ APP_HEADERS = {
 }
 
 NAV_TIMEOUT = int(os.environ.get("OZON_NAV_TIMEOUT_MS") or "60000")
+# Per-navigation cap, kept short so a single busy page can't eat the whole
+# solve budget (the challenge page keeps its network active for a long time).
+PER_NAV_TIMEOUT = min(45000, NAV_TIMEOUT)
 PORT = int(os.environ.get("PORT", "8080"))
 DEBUG = os.environ.get("OZON_DEBUG", "").lower() in ("1", "true", "yes")
 
@@ -137,7 +141,13 @@ class TrackingBrowser:
             timezone_id="Europe/Moscow",
             no_viewport=True,
             extra_http_headers={"Accept-Language": "ru,en;q=0.9"},
-            args=["--no-sandbox", "--disable-dev-shm-usage"],
+            # --enable-unsafe-swiftshader gives working (software) WebGL under
+            # xvfb; a browser with WebGL disabled is itself a bot signal.
+            args=[
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--enable-unsafe-swiftshader",
+            ],
         )
         if not PATCHED:
             await self._ctx.add_init_script(STEALTH_JS)
@@ -162,16 +172,32 @@ class TrackingBrowser:
         resp = await self._ctx.request.get(
             BFF_URL.format(track=quote(track, safe="")),
             headers={**APP_HEADERS, "Referer": PAGE_URL.format(track=track)},
-            timeout=NAV_TIMEOUT,
+            timeout=20000,
         )
         return resp.status, await resp.text()
+
+    async def _goto(self, page, url: str) -> None:
+        """Navigate with a bounded timeout so one busy page can't hang us."""
+        await page.goto(url, wait_until="domcontentloaded", timeout=PER_NAV_TIMEOUT)
 
     async def _settle(self, page) -> None:
         """Wait for the page to go quiet so challenge JS can run."""
         try:
-            await page.wait_for_load_state("networkidle", timeout=12000)
+            await page.wait_for_load_state("networkidle", timeout=8000)
         except Exception:  # noqa: BLE001
-            await asyncio.sleep(3)
+            await asyncio.sleep(2)
+
+    @staticmethod
+    async def _humanize(page) -> None:
+        """A few human-like signals: mouse movement, scroll, a short dwell."""
+        try:
+            for x, y in ((180, 240), (520, 360), (760, 520)):
+                await page.mouse.move(x, y, steps=6)
+                await asyncio.sleep(random.uniform(0.1, 0.35))
+            await page.mouse.wheel(0, random.randint(300, 700))
+        except Exception:  # noqa: BLE001
+            pass
+        await asyncio.sleep(random.uniform(0.6, 1.4))
 
     @staticmethod
     async def _is_challenge_page(page) -> bool:
@@ -192,12 +218,13 @@ class TrackingBrowser:
         """Solve the anti-bot challenge with the browser, then read the BFF.
 
         The tracking URL itself returns the anti-bot challenge page, whose JS
-        must run (and set the session cookie) before the real app loads. So we
-        warm up on the site root, let the challenge settle, then re-navigate to
-        the tracking page through the challenge, capturing the BFF response the
-        app makes (or calling the BFF ourselves once cookies are valid).
+        must run (and set the session cookie) before the real app loads. We
+        visit the site root like a human (mouse/scroll/dwell) so the challenge
+        clears, then navigate to the tracking page and read the app's BFF call.
+        Every step is logged and time-bounded so we never hang silently.
         """
         assert self._ctx is not None
+        _LOGGER.info("Solving via browser for %s (budget %ss)", track, NAV_TIMEOUT // 1000)
         page = await self._ctx.new_page()
         captured: dict[str, Any] = {}
         seen: list[int] = []
@@ -218,28 +245,37 @@ class TrackingBrowser:
         page.on("response", on_response)
         attempts = 0
         try:
-            # 1) Warm up on the root so the challenge script runs and sets cookies.
+            # 1) Warm up on the root like a human so the challenge clears.
             try:
-                await page.goto(f"{BASE}/", wait_until="domcontentloaded")
+                await self._goto(page, f"{BASE}/")
                 await self._settle(page)
+                await self._humanize(page)
+                _LOGGER.info(
+                    "Warm-up done for %s: url=%s challenge=%s",
+                    track, page.url, await self._is_challenge_page(page),
+                )
             except Exception as err:  # noqa: BLE001
-                _LOGGER.debug("Root warm-up failed: %s", err)
+                _LOGGER.info("Root warm-up failed for %s: %s", track, err)
 
             # 2) Load the tracking page, re-navigating through the challenge.
             deadline = time.monotonic() + NAV_TIMEOUT / 1000
             while time.monotonic() < deadline and "body" not in captured:
                 attempts += 1
                 try:
-                    await page.goto(
-                        PAGE_URL.format(track=track), wait_until="domcontentloaded"
-                    )
+                    await self._goto(page, PAGE_URL.format(track=track))
                     await self._settle(page)
+                    await self._humanize(page)
                 except Exception as err:  # noqa: BLE001
-                    _LOGGER.debug("Nav attempt %s failed: %s", attempts, err)
+                    _LOGGER.info("Nav attempt %s for %s failed: %s", attempts, track, err)
 
                 if "body" in captured:
                     break
-                if not await self._is_challenge_page(page):
+                is_challenge = await self._is_challenge_page(page)
+                _LOGGER.info(
+                    "Attempt %s for %s: url=%s challenge=%s bff=%s",
+                    attempts, track, page.url, is_challenge, seen or "none",
+                )
+                if not is_challenge:
                     # Challenge cleared: cookies are valid, fetch it ourselves.
                     try:
                         status, body = await self._api_request(track)
@@ -250,10 +286,7 @@ class TrackingBrowser:
                             return 404, body
                     except Exception:  # noqa: BLE001
                         pass
-                    # Give the app a moment to fire its own BFF call.
-                    await asyncio.sleep(2)
-                else:
-                    await asyncio.sleep(2)
+                await asyncio.sleep(2)
 
             _LOGGER.info(
                 "Solve %s: final_url=%s bff=%s responses=%s challenge_assets=%s "

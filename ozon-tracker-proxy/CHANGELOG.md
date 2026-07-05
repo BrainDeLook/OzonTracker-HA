@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.0
+
+- Fix the solver hanging with no `Solve` log line: cap each navigation at
+  45 s (separate from the overall budget) and log every step (warm-up,
+  each attempt with URL/challenge/BFF state) so progress is always visible.
+- Behave more like a real visit: warm up on the site root, move the mouse,
+  scroll and dwell before navigating to the tracking page.
+- Move to the latest patchright (1.61.1) via `patchright install --with-deps
+  chromium` for the strongest anti-detection patches.
+- Enable software WebGL (`--enable-unsafe-swiftshader`) — a browser with
+  WebGL disabled is itself a bot signal under a GPU-less virtual display.
+
 ## 0.8.0
 
 - Switch the browser engine to **patchright**, an undetected fork of

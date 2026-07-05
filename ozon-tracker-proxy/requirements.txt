@@ -1,7 +1,7 @@
 # patchright is an undetected, drop-in fork of Playwright that avoids the CDP
-# Runtime.enable leak anti-bots detect. Pin it to the SAME version as the base
-# image (mcr.microsoft.com/playwright/python:v1.48.0-jammy) so its Chromium
-# build and the base image's system libraries line up; `patchright install
-# chromium` in the Dockerfile then reuses that browser.
+# Runtime.enable leak anti-bots detect. Use a recent version for the best
+# patches; the Dockerfile runs `patchright install --with-deps chromium`, which
+# fetches the matching Chromium *and* any missing system libraries, so it does
+# not need to match the base image's Playwright version.
 aiohttp>=3.9
-patchright==1.48.0.post0
+patchright==1.61.1
