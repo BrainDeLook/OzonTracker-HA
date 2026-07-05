@@ -25,7 +25,18 @@ if [ -f "${OPTIONS}" ]; then
 
   NAV_TIMEOUT="$(opt nav_timeout_ms '')"
   [ -n "${NAV_TIMEOUT}" ] && export OZON_NAV_TIMEOUT_MS="${NAV_TIMEOUT}"
+
+  DEBUG="$(opt debug false)"
+  [ "${DEBUG}" = "True" ] || [ "${DEBUG}" = "true" ] && export OZON_DEBUG=1
 fi
 
-echo "[ozon-tracker-proxy] starting (log level: ${LOG_LEVEL:-INFO})"
+# A headed browser evades anti-bot detection far better than headless, but it
+# needs an X display. Run under a virtual framebuffer when available so app.py
+# can launch Chromium headed; otherwise fall back to headless.
+if [ "${OZON_HEADLESS:-0}" != "1" ] && command -v xvfb-run >/dev/null 2>&1; then
+  echo "[ozon-tracker-proxy] starting under xvfb (log level: ${LOG_LEVEL:-INFO})"
+  exec xvfb-run -a --server-args="-screen 0 1280x800x24 -nolisten tcp" python3 app.py
+fi
+
+echo "[ozon-tracker-proxy] starting headless (log level: ${LOG_LEVEL:-INFO})"
 exec python3 app.py

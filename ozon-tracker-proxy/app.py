@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from typing import Any
 from urllib.parse import quote
 
@@ -56,9 +57,25 @@ APP_HEADERS = {
 }
 
 NAV_TIMEOUT = int(os.environ.get("OZON_NAV_TIMEOUT_MS") or "60000")
-# How long a solved session is trusted before we re-verify via a full page
-# navigation. A direct context request is attempted first regardless.
 PORT = int(os.environ.get("PORT", "8080"))
+DEBUG = os.environ.get("OZON_DEBUG", "").lower() in ("1", "true", "yes")
+
+# Stealth patches applied to every page before any site script runs, so the
+# anti-bot sees a normal browser rather than an automated one.
+STEALTH_JS = """
+Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+Object.defineProperty(navigator, 'languages', {get: () => ['ru-RU','ru','en-US','en']});
+Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});
+window.chrome = window.chrome || { runtime: {} };
+const _q = window.navigator.permissions && window.navigator.permissions.query;
+if (_q) {
+  window.navigator.permissions.query = (p) => (
+    p && p.name === 'notifications'
+      ? Promise.resolve({state: Notification.permission})
+      : _q(p)
+  );
+}
+"""
 
 
 class TrackingBrowser:
@@ -72,12 +89,20 @@ class TrackingBrowser:
 
     async def start(self) -> None:
         self._pw = await async_playwright().start()
+        # A headless browser is trivially detected by anti-bots. When a display
+        # is available (run.sh starts us under xvfb) we launch a *headed*
+        # Chromium, which is far harder to fingerprint. OZON_HEADLESS=1 forces
+        # headless if you cannot provide a display.
+        force = os.environ.get("OZON_HEADLESS")
+        headless = force == "1" if force else not os.environ.get("DISPLAY")
         self._browser = await self._pw.chromium.launch(
-            headless=True,
+            headless=headless,
             args=[
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
                 "--disable-blink-features=AutomationControlled",
+                "--disable-features=IsolateOrigins,site-per-process",
+                "--window-size=1280,800",
             ],
         )
         self._ctx = await self._browser.new_context(
@@ -85,9 +110,15 @@ class TrackingBrowser:
             locale="ru-RU",
             timezone_id="Europe/Moscow",
             viewport={"width": 1280, "height": 800},
+            extra_http_headers={"Accept-Language": "ru,en;q=0.9"},
         )
+        await self._ctx.add_init_script(STEALTH_JS)
         self._ctx.set_default_navigation_timeout(NAV_TIMEOUT)
-        _LOGGER.info("Chromium context ready")
+        _LOGGER.info(
+            "Chromium context ready (headless=%s, display=%s)",
+            headless,
+            os.environ.get("DISPLAY") or "none",
+        )
 
     async def close(self) -> None:
         for closer in (
@@ -113,28 +144,61 @@ class TrackingBrowser:
         return resp.status, await resp.text()
 
     async def _solve_via_page(self, track: str) -> tuple[int, str] | None:
-        """Navigate the real page so its JS solves the challenge; capture BFF."""
+        """Load the real page so its JS solves the challenge, then read the BFF.
+
+        Two ways to obtain the data are raced against the timeout:
+        1. capture a 200 BFF response the page itself makes, and
+        2. once challenge cookies exist in the context, call the BFF ourselves.
+        """
         assert self._ctx is not None
         page = await self._ctx.new_page()
         captured: dict[str, Any] = {}
+        seen_statuses: list[int] = []
 
         async def on_response(resp: Response) -> None:
-            if "ozon-track-bff/tracking" in resp.url and resp.status == 200:
-                try:
-                    captured["body"] = await resp.text()
-                except Exception:  # noqa: BLE001
-                    pass
+            if "ozon-track-bff/tracking" in resp.url:
+                seen_statuses.append(resp.status)
+                if resp.status == 200 and "body" not in captured:
+                    try:
+                        captured["body"] = await resp.text()
+                    except Exception:  # noqa: BLE001
+                        pass
 
         page.on("response", on_response)
         try:
             await page.goto(
                 PAGE_URL.format(track=track), wait_until="domcontentloaded"
             )
-            # Give the challenge + app time to run and fire the BFF call.
-            for _ in range(30):
+            deadline = time.monotonic() + NAV_TIMEOUT / 1000
+            while time.monotonic() < deadline:
                 if "body" in captured:
                     break
-                await asyncio.sleep(0.5)
+                # The page may have solved the challenge (cookies set) without
+                # yet firing the BFF call for us to capture -> ask ourselves.
+                try:
+                    status, body = await self._api_request(track)
+                    if status == 200:
+                        captured["body"] = body
+                        break
+                    if status == 404:
+                        return 404, body
+                except Exception:  # noqa: BLE001
+                    pass
+                await asyncio.sleep(1.5)
+
+            _LOGGER.info(
+                "Solve %s: final_url=%s bff_statuses=%s solved=%s",
+                track,
+                page.url,
+                seen_statuses or "none",
+                "body" in captured,
+            )
+            if "body" not in captured and DEBUG:
+                try:
+                    html = await page.content()
+                    _LOGGER.info("DEBUG %s page[:1000]=%r", track, html[:1000])
+                except Exception:  # noqa: BLE001
+                    pass
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning("Page navigation for %s failed: %s", track, err)
         finally:
@@ -157,17 +221,11 @@ class TrackingBrowser:
             except Exception as err:  # noqa: BLE001
                 _LOGGER.info("Direct request for %s failed (%s); solving via page", track, err)
 
-            # 2) Solve the challenge by loading the real page, capture the BFF.
-            captured = await self._solve_via_page(track)
-            if captured is not None:
-                return captured
-
-            # 3) Retry the direct request now that challenge cookies are set.
-            try:
-                status, body = await self._api_request(track)
-                return status, body
-            except Exception as err:  # noqa: BLE001
-                return 502, f'{{"error": "browser fetch failed: {err}"}}'
+            # 2) Solve the challenge by loading the real page.
+            result = await self._solve_via_page(track)
+            if result is not None:
+                return result
+            return 502, '{"error": "anti-bot challenge not solved in browser"}'
 
 
 browser = TrackingBrowser()

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.0
+
+- Solve the anti-bot challenge far more reliably: run a **headed** Chromium
+  under a virtual display (xvfb) instead of easily-detected headless, and
+  apply stealth patches (`navigator.webdriver`, languages, plugins, chrome
+  runtime) before site scripts run.
+- After navigation, poll the BFF endpoint with the browser's own cookies so
+  the data is fetched as soon as the challenge clears.
+- Log the final URL and the BFF status codes seen while solving.
+- New `debug` option: dumps the challenge page HTML when solving fails.
+- `OZON_HEADLESS=1` forces headless if no display is available.
+
 ## 0.6.2
 
 - Fix "No module named 'playwright'" on start: pin `playwright==1.48.0` to

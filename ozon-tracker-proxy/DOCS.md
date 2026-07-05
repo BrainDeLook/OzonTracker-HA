@@ -30,7 +30,15 @@ automatically, then serves the tracking data to the integration.
 |---|---|---|
 | `log_level` | `info` | Log verbosity (`trace`…`fatal`). |
 | `app_version` | `release/TPLAPI-5269` | Value of the `x-o3-app-version` header the browser sends. Update if Ozon starts rejecting it. |
-| `nav_timeout_ms` | `60000` | Page navigation / request timeout in milliseconds. |
+| `nav_timeout_ms` | `60000` | Page navigation / challenge-solving timeout in ms. Raise it (e.g. `120000`) if the challenge needs longer. |
+| `debug` | `false` | Log the challenge page HTML when solving fails (troubleshooting). |
+
+## How it gets past the anti-bot
+
+A headless browser is easy for the anti-bot to spot, so the add-on runs a
+**headed** Chromium under a virtual display (xvfb) with stealth patches
+applied. It loads the tracking page, lets the challenge JavaScript run and
+solve, then reads the tracking JSON with the resulting session cookies.
 
 ## Verifying it works
 
@@ -42,9 +50,14 @@ curl http://<HA-host>:8080/track/33310100-0168-1
 ```
 
 The second call should return JSON with an `items` array. If it returns an
-error or times out, check the add-on log — the challenge may need a longer
-`nav_timeout_ms`, or your Home Assistant host may be reaching Ozon from a
-non-Russian IP (which Ozon can block regardless of the browser).
+error or times out:
+
+- Check the add-on log. A line like
+  `Solve …: final_url=… bff_statuses=[403] solved=False` means the challenge
+  did not clear.
+- Raise `nav_timeout_ms` to `120000` and enable `debug` to log the page HTML.
+- Make sure your Home Assistant host reaches Ozon from a **Russian** IP — a
+  foreign VPN/VPS is blocked regardless of the browser.
 
 ## Notes
 
