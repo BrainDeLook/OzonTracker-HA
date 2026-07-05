@@ -29,15 +29,26 @@ from urllib.parse import quote
 
 from aiohttp import web
 
-# patchright is a drop-in, undetected fork of Playwright: it avoids the
-# CDP Runtime.enable leak that anti-bots (like Ozon's abt-challenge) use to
-# spot automation. Prefer it; fall back to vanilla Playwright if unavailable.
+# Playwright types are always importable (camoufox depends on Playwright).
+from playwright.async_api import BrowserContext, Playwright, Response
+
+# camoufox: a Firefox anti-detect browser that spoofs the full fingerprint —
+# the default engine, since Chromium (even patched) failed Ozon's challenge
+# under a GPU-less virtual display.
 try:
-    from patchright.async_api import BrowserContext, Playwright, Response, async_playwright
+    from camoufox.async_api import AsyncCamoufox
+
+    _HAS_CAMOUFOX = True
+except Exception:  # noqa: BLE001  # pragma: no cover
+    _HAS_CAMOUFOX = False
+
+# Chromium fallback engine: prefer patchright (undetected), else plain Playwright.
+try:
+    from patchright.async_api import async_playwright as chromium_playwright
 
     PATCHED = True
 except ImportError:  # pragma: no cover
-    from playwright.async_api import BrowserContext, Playwright, Response, async_playwright
+    from playwright.async_api import async_playwright as chromium_playwright
 
     PATCHED = False
 
@@ -68,6 +79,8 @@ NAV_TIMEOUT = int(os.environ.get("OZON_NAV_TIMEOUT_MS") or "60000")
 PER_NAV_TIMEOUT = min(45000, NAV_TIMEOUT)
 PORT = int(os.environ.get("PORT", "8080"))
 DEBUG = os.environ.get("OZON_DEBUG", "").lower() in ("1", "true", "yes")
+# Browser engine: "camoufox" (Firefox anti-detect, default) or "chromium".
+ENGINE = (os.environ.get("OZON_ENGINE") or "camoufox").lower()
 
 # Minimal stealth patches, only used on the vanilla-Playwright fallback.
 # patchright already handles these (and the CDP leaks) itself, so we must NOT
@@ -101,6 +114,7 @@ class TrackingBrowser:
 
     def __init__(self) -> None:
         self._pw: Playwright | None = None
+        self._cam: Any | None = None
         self._ctx: BrowserContext | None = None
         self._lock = asyncio.Lock()
 
@@ -109,21 +123,50 @@ class TrackingBrowser:
         return self._ctx is not None
 
     async def start(self) -> None:
-        self._pw = await async_playwright().start()
-        # A headless browser is trivially detected. When a display is available
-        # (run.sh starts Xvfb) launch a *headed* Chromium; fall back to headless
-        # if that fails. OZON_HEADLESS=1 forces headless.
+        if ENGINE == "camoufox" and _HAS_CAMOUFOX:
+            await self._start_camoufox()
+        else:
+            if ENGINE == "camoufox":
+                _LOGGER.warning("camoufox not available; falling back to Chromium")
+            await self._start_chromium()
+
+    async def _start_camoufox(self) -> None:
+        # headless="virtual" runs a *headed* Firefox under Camoufox's own Xvfb
+        # (best for a headless server). Honour an external DISPLAY / OZON_HEADLESS.
+        force = os.environ.get("OZON_HEADLESS")
+        if force == "1":
+            headless: Any = True
+        elif os.environ.get("DISPLAY"):
+            headless = False
+        else:
+            headless = "virtual"
+        _LOGGER.info("Launching Camoufox (headless=%s)", headless)
+        self._cam = AsyncCamoufox(
+            headless=headless,
+            persistent_context=True,
+            user_data_dir=_profile_dir(),
+            os="windows",
+            locale="ru-RU",
+            humanize=True,
+            i_know_what_im_doing=True,
+        )
+        self._ctx = await self._cam.__aenter__()
+        self._ctx.set_default_navigation_timeout(NAV_TIMEOUT)
+        _LOGGER.info("Camoufox context ready (headless=%s)", headless)
+
+    async def _start_chromium(self) -> None:
+        self._pw = await chromium_playwright().start()
         force = os.environ.get("OZON_HEADLESS")
         prefer_headless = force == "1" if force else not os.environ.get("DISPLAY")
         try:
-            await self._launch(prefer_headless)
+            await self._launch_chromium(prefer_headless)
         except Exception as err:  # noqa: BLE001
             if prefer_headless:
                 raise
             _LOGGER.warning("Headed launch failed (%s); retrying headless", err)
-            await self._launch(True)
+            await self._launch_chromium(True)
 
-    async def _launch(self, headless: bool) -> None:
+    async def _launch_chromium(self, headless: bool) -> None:
         assert self._pw is not None
         _LOGGER.info(
             "Launching Chromium (patchright=%s, headless=%s, display=%s)",
@@ -131,8 +174,6 @@ class TrackingBrowser:
             headless,
             os.environ.get("DISPLAY") or "none",
         )
-        # A persistent context keeps the solved anti-bot cookies on disk, so
-        # repeated lookups (and restarts) reuse the same session.
         self._ctx = await self._pw.chromium.launch_persistent_context(
             user_data_dir=_profile_dir(),
             headless=headless,
@@ -141,8 +182,6 @@ class TrackingBrowser:
             timezone_id="Europe/Moscow",
             no_viewport=True,
             extra_http_headers={"Accept-Language": "ru,en;q=0.9"},
-            # --enable-unsafe-swiftshader gives working (software) WebGL under
-            # xvfb; a browser with WebGL disabled is itself a bot signal.
             args=[
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
@@ -155,6 +194,14 @@ class TrackingBrowser:
         _LOGGER.info("Chromium context ready (patchright=%s, headless=%s)", PATCHED, headless)
 
     async def close(self) -> None:
+        if self._cam is not None:
+            try:
+                await self._cam.__aexit__(None, None, None)
+            except Exception:  # noqa: BLE001
+                pass
+            self._cam = None
+            self._ctx = None
+            return
         for closer in (
             getattr(self._ctx, "close", None),
             getattr(self._pw, "stop", None),

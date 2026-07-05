@@ -1,7 +1,7 @@
-# patchright is an undetected, drop-in fork of Playwright that avoids the CDP
-# Runtime.enable leak anti-bots detect. Use a recent version for the best
-# patches; the Dockerfile runs `patchright install --with-deps chromium`, which
-# fetches the matching Chromium *and* any missing system libraries, so it does
-# not need to match the base image's Playwright version.
+# camoufox is a Firefox-based anti-detect browser: it spoofs the whole
+# fingerprint (WebGL, canvas, fonts, navigator, screen) at the browser level,
+# which is what defeats challenges that Chromium forks fail under a GPU-less
+# virtual display. Its browser binary is fetched in the Dockerfile
+# (`python -m camoufox fetch`). It pulls a compatible Playwright itself.
 aiohttp>=3.9
-patchright==1.61.1
+camoufox>=0.4.11

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.10.0
+
+- Add a **camoufox** (anti-detect Firefox) engine and make it the default,
+  after Chromium — even patched with patchright — kept failing Ozon's
+  abt-challenge (fingerprint-level detection under a GPU-less display).
+  camoufox spoofs the whole fingerprint (WebGL, canvas, fonts, navigator).
+- Runs headful under camoufox's built-in virtual display
+  (`headless="virtual"`), with `os=windows`, `locale=ru-RU`, `humanize` and a
+  persistent profile so a solved session survives restarts.
+- New `engine` option: `camoufox` (default) or `chromium` (the previous
+  patchright/Playwright path, kept as a fallback).
+- Dockerfile fetches the Camoufox browser (`python -m camoufox fetch`).
+
 ## 0.9.0
 
 - Fix the solver hanging with no `Solve` log line: cap each navigation at

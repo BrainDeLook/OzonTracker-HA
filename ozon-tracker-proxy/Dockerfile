@@ -7,9 +7,11 @@ WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-# Install the patched Chromium patchright drives, plus any system libraries it
-# needs on top of the base image (--with-deps uses apt at build time).
-RUN patchright install --with-deps chromium
+# camoufox needs PyYAML with the libyaml C extension (CLoader).
+RUN pip install --no-cache-dir --force-reinstall pyyaml
+# Fetch the Camoufox (patched Firefox) binary and fingerprint data.
+RUN python -m camoufox fetch
+# The base image already ships Chromium + Playwright for the fallback engine.
 
 COPY app.py run.sh ./
 RUN chmod a+x run.sh

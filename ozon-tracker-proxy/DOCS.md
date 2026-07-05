@@ -28,6 +28,7 @@ automatically, then serves the tracking data to the integration.
 
 | Option | Default | Description |
 |---|---|---|
+| `engine` | `camoufox` | Browser engine: `camoufox` (anti-detect Firefox) or `chromium`. |
 | `log_level` | `info` | Log verbosity (`trace`…`fatal`). |
 | `app_version` | `release/TPLAPI-5269` | Value of the `x-o3-app-version` header the browser sends. Update if Ozon starts rejecting it. |
 | `nav_timeout_ms` | `60000` | Page navigation / challenge-solving timeout in ms. Raise it (e.g. `120000`) if the challenge needs longer. |
@@ -35,12 +36,15 @@ automatically, then serves the tracking data to the integration.
 
 ## How it gets past the anti-bot
 
-Ozon's challenge detects ordinary automation (e.g. Playwright's CDP
-`Runtime.enable` leak), so the add-on drives Chromium with **patchright** — an
-undetected fork of Playwright — running **headed** under a virtual display
-(xvfb). It loads the tracking page, lets the challenge JavaScript run and set
-its cookie, then reads the tracking JSON. The browser profile is kept in
+Ozon's challenge fingerprints the browser, so the add-on uses **camoufox** — a
+Firefox-based anti-detect browser that spoofs the whole fingerprint (WebGL,
+canvas, fonts, navigator) — running headful under its own virtual display with
+human-like cursor movement. It visits the tracking page, lets the challenge
+clear, then reads the tracking JSON. The browser profile is kept in
 `/data/ozon-profile`, so a solved session survives add-on restarts.
+
+The `engine` option switches between `camoufox` (default) and `chromium` (the
+older patchright/Playwright path) if you want to compare.
 
 ## Verifying it works
 

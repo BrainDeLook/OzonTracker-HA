@@ -28,21 +28,26 @@ if [ -f "${OPTIONS}" ]; then
 
   DEBUG="$(opt debug false)"
   [ "${DEBUG}" = "True" ] || [ "${DEBUG}" = "true" ] && export OZON_DEBUG=1
+
+  ENGINE_OPT="$(opt engine camoufox)"
+  [ -n "${ENGINE_OPT}" ] && export OZON_ENGINE="${ENGINE_OPT}"
 fi
 
 # Make Python log lines appear immediately in the add-on log.
 export PYTHONUNBUFFERED=1
 
-# A headed browser evades anti-bot detection far better than headless, but it
-# needs an X display. Start a virtual framebuffer directly (more reliable than
-# the xvfb-run wrapper) and point Chromium at it; app.py auto-detects DISPLAY
-# and launches headed, falling back to headless if that fails.
-if [ "${OZON_HEADLESS:-0}" != "1" ] && command -v Xvfb >/dev/null 2>&1; then
+ENGINE="${OZON_ENGINE:-camoufox}"
+
+# The camoufox engine manages its own virtual display (headless="virtual").
+# For the Chromium fallback we start our own Xvfb so it can run *headed*
+# (far less detectable than headless); app.py auto-detects DISPLAY.
+if [ "${ENGINE}" != "camoufox" ] && [ "${OZON_HEADLESS:-0}" != "1" ] \
+    && command -v Xvfb >/dev/null 2>&1; then
   echo "[ozon-tracker-proxy] starting virtual display :99"
   Xvfb :99 -screen 0 1280x800x24 -nolisten tcp >/tmp/xvfb.log 2>&1 &
   export DISPLAY=:99
   sleep 1
 fi
 
-echo "[ozon-tracker-proxy] launching app (DISPLAY=${DISPLAY:-none}, log level: ${LOG_LEVEL:-INFO})"
+echo "[ozon-tracker-proxy] launching app (engine=${ENGINE}, DISPLAY=${DISPLAY:-none}, log level: ${LOG_LEVEL:-INFO})"
 exec python3 -u app.py
