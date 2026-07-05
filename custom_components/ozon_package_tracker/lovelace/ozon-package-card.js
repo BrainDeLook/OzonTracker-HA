@@ -7,7 +7,7 @@
   const CARD_TAG = "ozon-package-card";
   const EDITOR_TAG = "ozon-package-card-editor";
   const DOMAIN = "ozon_package_tracker";
-  const CARD_VERSION = "0.3.0";
+  const CARD_VERSION = "0.4.0";
 
   const STRINGS = {
     ru: {
@@ -93,7 +93,19 @@
     }
     .actions button:hover, .actions a:hover { color: var(--primary-text-color); }
     .actions ha-icon { --mdc-icon-size: 18px; }
-    .events { padding: 0 16px 8px 52px; }
+    .events {
+      padding: 0 16px 4px 52px;
+      /* Show about 5 events, then scroll inside the block. */
+      max-height: var(--ozon-events-max-height, 8rem);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+      scrollbar-color: var(--divider-color) transparent;
+    }
+    .events::-webkit-scrollbar { width: 6px; }
+    .events::-webkit-scrollbar-thumb {
+      background: var(--divider-color); border-radius: 3px;
+    }
     .event {
       display: flex; gap: 10px; padding: 3px 0;
       color: var(--secondary-text-color); font-size: 0.85em;
