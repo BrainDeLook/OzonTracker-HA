@@ -14,15 +14,25 @@
     "step": {
       "init": {
         "data": {
-          "proxy_url": "URL headless-браузер прокси (рекомендуется)",
+          "source": "Источник данных",
+          "proxy_url": "URL headless-браузер прокси (только для источника Ozon)",
           "update_interval": "Интервал обновления (минуты)",
           "auto_delete_days": "Удалять доставленные посылки через (дней, 0 = никогда)",
-          "cookie": "Заголовок Cookie (запасной вариант, необязательно)"
+          "cookie": "Заголовок Cookie (запасной вариант для Ozon, необязательно)"
         },
         "data_description": {
-          "proxy_url": "Адрес сервиса ozon-tracker-proxy, который решает antibot-challenge, напр. http://homeassistant.local:8080. Оставьте пустым, чтобы обращаться к Ozon напрямую.",
-          "cookie": "Крайний запасной вариант, если прокси не используется: откройте tracking.ozon.ru в браузере, в DevTools (вкладка Network) скопируйте заголовок запроса 'cookie' и вставьте сюда."
+          "source": "track365 (рекомендуется): данные с track365.ru — работает сразу, без прокси и антибота. Ozon: напрямую с tracking.ozon.ru (нужен headless-браузер прокси или кука из-за антибота).",
+          "proxy_url": "Используется только с источником Ozon: адрес сервиса ozon-tracker-proxy, напр. http://homeassistant.local:8080.",
+          "cookie": "Используется только с источником Ozon (крайний вариант): заголовок запроса 'cookie' из браузера, где открыт tracking.ozon.ru."
         }
+      }
+    }
+  },
+  "selector": {
+    "source": {
+      "options": {
+        "track365": "track365.ru (рекомендуется, без прокси)",
+        "ozon": "Ozon напрямую (нужен прокси/кука)"
       }
     }
   },

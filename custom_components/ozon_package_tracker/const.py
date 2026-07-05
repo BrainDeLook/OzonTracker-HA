@@ -12,6 +12,11 @@ CONF_UPDATE_INTERVAL = "update_interval"
 CONF_AUTO_DELETE_DAYS = "auto_delete_days"
 CONF_COOKIE = "cookie"
 CONF_PROXY_URL = "proxy_url"
+CONF_SOURCE = "source"
+
+SOURCE_TRACK365 = "track365"
+SOURCE_OZON = "ozon"
+DEFAULT_SOURCE = SOURCE_TRACK365
 
 DEFAULT_UPDATE_INTERVAL = 30  # minutes
 DEFAULT_AUTO_DELETE_DAYS = 0  # 0 = keep delivered packages forever

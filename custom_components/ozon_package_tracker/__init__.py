@@ -24,6 +24,8 @@ from .const import (
     CARD_FILENAME,
     CONF_COOKIE,
     CONF_PROXY_URL,
+    CONF_SOURCE,
+    DEFAULT_SOURCE,
     DOMAIN,
     FRONTEND_URL_BASE,
     PLATFORMS,
@@ -79,6 +81,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         session,
         cookie=entry.options.get(CONF_COOKIE),
         proxy_url=entry.options.get(CONF_PROXY_URL),
+        source=entry.options.get(CONF_SOURCE, DEFAULT_SOURCE),
     )
     coordinator = OzonPackageCoordinator(hass, entry, api)
     await coordinator.async_load_store()

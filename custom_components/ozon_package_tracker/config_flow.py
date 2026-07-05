@@ -19,10 +19,14 @@ from .const import (
     CONF_AUTO_DELETE_DAYS,
     CONF_COOKIE,
     CONF_PROXY_URL,
+    CONF_SOURCE,
     CONF_UPDATE_INTERVAL,
     DEFAULT_AUTO_DELETE_DAYS,
+    DEFAULT_SOURCE,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
+    SOURCE_OZON,
+    SOURCE_TRACK365,
 )
 
 
@@ -58,6 +62,16 @@ class OzonPackageTrackerOptionsFlow(OptionsFlow):
         options = self.config_entry.options
         schema = vol.Schema(
             {
+                vol.Optional(
+                    CONF_SOURCE,
+                    default=options.get(CONF_SOURCE, DEFAULT_SOURCE),
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[SOURCE_TRACK365, SOURCE_OZON],
+                        translation_key="source",
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
                 vol.Optional(
                     CONF_PROXY_URL,
                     description={"suggested_value": options.get(CONF_PROXY_URL, "")},

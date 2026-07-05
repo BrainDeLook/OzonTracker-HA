@@ -1,13 +1,17 @@
 {
   "domain": "ozon_package_tracker",
   "name": "Ozon Package Tracker",
-  "codeowners": ["@BrainDeLook"],
+  "codeowners": [
+    "@BrainDeLook"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/BrainDeLook/OzonTracker-HA",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/BrainDeLook/OzonTracker-HA/issues",
-  "requirements": ["curl_cffi>=0.7.0"],
+  "requirements": [
+    "curl_cffi>=0.7.0"
+  ],
   "single_config_entry": true,
-  "version": "0.6.1"
+  "version": "0.7.0"
 }

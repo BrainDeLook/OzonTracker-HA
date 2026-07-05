@@ -29,8 +29,10 @@ parser and an HTML-page fallback are kept as safety nets for future changes.
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
+import random
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -63,6 +65,30 @@ CURL_IMPERSONATE = "chrome"
 
 # Markers that identify Ozon's anti-bot challenge response.
 CHALLENGE_MARKERS = ("challengeURL", "challenge.html", "incidentId")
+
+# --- track365.ru aggregator source ---------------------------------------
+# track365.ru shows Ozon (and many other) parcels with rich, human-readable
+# statuses and, importantly, without a JS anti-bot challenge — so it can be
+# queried with a plain GET. Its /TRACK_SERVER.php endpoint expects an obfuscated
+# `fp` parameter that is simply base64 of the char codes (each XOR 6) of
+# PREFIX + User-Agent + tracking number (reverse-engineered and verified
+# byte-for-byte against a captured request).
+TRACK365_ENDPOINT = "https://track365.ru/TRACK_SERVER.php"
+TRACK365_PAGE = "https://track365.ru/?track={tracking_number}"
+TRACK365_FP_PREFIX = "bbbcbb``c"
+TRACK365_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
+)
+# Overall statuses and per-event place codes / text that mean "delivered".
+TRACK365_DELIVERED_STATUSES = {"delivered", "received", "pickup", "delivered_to_pickup"}
+TRACK365_DELIVERED_PLACES = {
+    "TYP_SUCCESS",
+    "TYP_DELIVERED",
+    "TYP_PICKED_UP",
+    "TYP_PICKUP",
+    "TYP_HANDED",
+}
 
 # Headers common to every request. When curl_cffi impersonates a browser it
 # already sets User-Agent / sec-ch-ua* and the TLS fingerprint, so those are
@@ -232,10 +258,12 @@ class OzonTrackingApi:
         session: aiohttp.ClientSession,
         cookie: str | None = None,
         proxy_url: str | None = None,
+        source: str = "track365",
     ) -> None:
         self._session = session
         self._cookie = (cookie or "").strip() or None
         self._proxy_url = _normalize_proxy_url(proxy_url)
+        self._source = (source or "track365").strip().lower()
         self._warmed_up = False
         self._curl: Any | None = None
 
@@ -246,6 +274,10 @@ class OzonTrackingApi:
     @property
     def uses_proxy(self) -> bool:
         return self._proxy_url is not None
+
+    @property
+    def source(self) -> str:
+        return self._source
 
     async def async_close(self) -> None:
         """Close the curl_cffi session, if one was created."""
@@ -313,6 +345,11 @@ class OzonTrackingApi:
     async def async_get_tracking(self, tracking_number: str) -> dict[str, Any]:
         """Fetch and normalize tracking info for a single tracking number."""
         track = tracking_number.strip()
+
+        # Aggregator source: query track365.ru directly (no anti-bot, richer
+        # data). This is the default and needs no proxy or browser.
+        if self._source == "track365":
+            return await self._get_track365(track)
 
         # When a headless-browser proxy is configured, it handles the anti-bot
         # challenge for us; use it exclusively and skip the direct path.
@@ -407,6 +444,44 @@ class OzonTrackingApi:
             )
         return normalized
 
+    async def _get_track365(self, track: str) -> dict[str, Any]:
+        """Fetch tracking data from track365.ru (plain GET, no anti-bot)."""
+        fp = _build_track365_fp(track)
+        headers = {
+            "Accept": "*/*",
+            "Accept-Language": "ru,en;q=0.9",
+            "Content-Type": "application/json",
+            "cache": "no-store",
+            "Referer": TRACK365_PAGE.format(tracking_number=quote(track, safe="")),
+            "User-Agent": TRACK365_UA,
+            "sec-ch-ua": '"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"Windows"',
+        }
+        params = {"fp": fp, "r": str(random.randint(1, 10000))}
+        try:
+            async with self._session.get(
+                TRACK365_ENDPOINT,
+                params=params,
+                headers=headers,
+                timeout=REQUEST_TIMEOUT,
+            ) as resp:
+                body = await resp.text()
+                status = resp.status
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            raise OzonTrackingApiError(
+                f"Could not reach track365.ru: {err.__class__.__name__}: {err}"
+            ) from err
+
+        if status != 200:
+            raise OzonTrackingApiError(f"track365 HTTP {status}: {body[:160]!r}")
+        normalized = parse_track365(_loads(body), track)
+        if normalized is None:
+            raise OzonTrackingApiError(
+                f"track365 returned no data for {track} (unknown tracking number?)"
+            )
+        return normalized
+
     @staticmethod
     def _parse_payloads(payloads: list[Any], track: str) -> dict[str, Any] | None:
         for payload in payloads:
@@ -477,6 +552,75 @@ def _loads(text: str) -> Any:
         return json.loads(text)
     except json.JSONDecodeError as err:
         raise OzonTrackingApiError(f"invalid JSON: {err}") from err
+
+
+def _build_track365_fp(track: str) -> str:
+    """Build track365's obfuscated ``fp`` query parameter.
+
+    fp = base64( ",".join( str(ord(c) ^ 6) for c in PREFIX + UA + track ) ).
+    Reverse-engineered from track365's l.js and verified byte-for-byte.
+    """
+    plain = TRACK365_FP_PREFIX + TRACK365_UA + track
+    nums = ",".join(str(ord(c) ^ 6) for c in plain)
+    return base64.b64encode(nums.encode()).decode()
+
+
+def parse_track365(payload: Any, tracking_number: str) -> dict[str, Any] | None:
+    """Normalize a track365.ru response to the shared tracking structure."""
+    if not isinstance(payload, dict) or not payload.get("status"):
+        return None
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return None
+    raw_events = data.get("events")
+    if not isinstance(raw_events, list):
+        return None
+
+    events: list[dict[str, Any]] = []
+    delivered = False
+    courier: str | None = None
+    for item in raw_events:
+        if not isinstance(item, dict):
+            continue
+        text = (item.get("attribute") or item.get("place") or "").strip()
+        moment = item.get("date")
+        if courier is None and item.get("courier"):
+            courier = str(item["courier"])
+        place = str(item.get("place") or "")
+        if place in TRACK365_DELIVERED_PLACES or any(
+            m in text.lower() for m in DELIVERED_MARKERS
+        ):
+            delivered = True
+        if text:
+            events.append(
+                {
+                    "time": moment if isinstance(moment, str) else None,
+                    "status": text,
+                    "code": place or None,
+                }
+            )
+
+    # track365 returns events newest-first already; keep that order.
+    overall = str(data.get("status") or "").lower()
+    if overall in TRACK365_DELIVERED_STATUSES:
+        delivered = True
+
+    status = events[0]["status"] if events else (data.get("status") or None)
+    if status is None:
+        return None
+
+    return {
+        "tracking_number": data.get("trackcode") or tracking_number,
+        "status": status,
+        "status_code": data.get("status"),
+        "delivered": delivered,
+        "events": events[:20],
+        "courier": courier,
+        "delivery_type": None,
+        "estimated_delivery": None,
+        "delivery_date_begin": None,
+        "delivery_date_end": None,
+    }
 
 
 def _humanize_code(code: str) -> str:

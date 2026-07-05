@@ -14,15 +14,25 @@
     "step": {
       "init": {
         "data": {
-          "proxy_url": "Headless-browser proxy URL (recommended)",
+          "source": "Data source",
+          "proxy_url": "Headless-browser proxy URL (source: Ozon only)",
           "update_interval": "Update interval (minutes)",
           "auto_delete_days": "Auto-delete delivered packages after (days, 0 = never)",
-          "cookie": "Cookie header (fallback, optional)"
+          "cookie": "Cookie header (source: Ozon fallback, optional)"
         },
         "data_description": {
-          "proxy_url": "URL of the companion ozon-tracker-proxy service that solves the anti-bot challenge, e.g. http://homeassistant.local:8080. Leave empty to query Ozon directly.",
-          "cookie": "Last-resort fallback if you do not run the proxy: open tracking.ozon.ru in your browser, copy the 'cookie' request header from DevTools (Network tab) and paste it here."
+          "source": "track365 (recommended): query track365.ru — works out of the box, no proxy or anti-bot. Ozon: query tracking.ozon.ru directly (needs the headless-browser proxy or a cookie because of the anti-bot).",
+          "proxy_url": "Only used with source Ozon: URL of the companion ozon-tracker-proxy service, e.g. http://homeassistant.local:8080.",
+          "cookie": "Only used with source Ozon (last resort): the 'cookie' request header from a browser that opened tracking.ozon.ru."
         }
+      }
+    }
+  },
+  "selector": {
+    "source": {
+      "options": {
+        "track365": "track365.ru (recommended, no proxy)",
+        "ozon": "Ozon direct (needs proxy/cookie)"
       }
     }
   },
