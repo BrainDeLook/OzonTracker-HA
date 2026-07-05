@@ -66,6 +66,10 @@ CURL_IMPERSONATE = "chrome"
 # Markers that identify Ozon's anti-bot challenge response.
 CHALLENGE_MARKERS = ("challengeURL", "challenge.html", "incidentId")
 
+# Maximum number of history events kept per package (long international routes
+# can have 20+ checkpoints).
+EVENTS_LIMIT = 60
+
 # --- track365.ru aggregator source ---------------------------------------
 # track365.ru shows Ozon (and many other) parcels with rich, human-readable
 # statuses and, importantly, without a JS anti-bot challenge — so it can be
@@ -614,7 +618,7 @@ def parse_track365(payload: Any, tracking_number: str) -> dict[str, Any] | None:
         "status": status,
         "status_code": data.get("status"),
         "delivered": delivered,
-        "events": events[:20],
+        "events": events[:EVENTS_LIMIT],
         "courier": courier,
         "delivery_type": None,
         "estimated_delivery": None,
@@ -701,7 +705,7 @@ def parse_bff_payload(payload: Any, tracking_number: str) -> dict[str, Any] | No
         "status": latest["status"],
         "status_code": latest["code"],
         "delivered": delivered,
-        "events": events[:20],
+        "events": events[:EVENTS_LIMIT],
         "courier": None,
         "delivery_type": delivery_type_name,
         "estimated_delivery": estimated,
@@ -915,7 +919,7 @@ def normalize_payload(payload: Any, tracking_number: str) -> dict[str, Any] | No
         "status": status,
         "status_code": None,
         "delivered": delivered,
-        "events": events[:20],
+        "events": events[:EVENTS_LIMIT],
         "courier": _find_first_text(payload, COURIER_KEYS),
         "delivery_type": None,
         "estimated_delivery": _find_first_text(payload, ETA_KEYS),

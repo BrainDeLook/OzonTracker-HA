@@ -18,7 +18,7 @@ from .coordinator import OzonPackageCoordinator
 
 PARALLEL_UPDATES = 0
 
-MAX_EVENT_ATTRIBUTES = 20
+MAX_EVENT_ATTRIBUTES = 60
 
 
 async def async_setup_entry(

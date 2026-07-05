@@ -7,7 +7,7 @@
   const CARD_TAG = "ozon-package-card";
   const EDITOR_TAG = "ozon-package-card-editor";
   const DOMAIN = "ozon_package_tracker";
-  const CARD_VERSION = "0.2.0";
+  const CARD_VERSION = "0.3.0";
 
   const STRINGS = {
     ru: {
@@ -135,7 +135,7 @@
         show_add_form: true,
         show_track_number: true,
         show_last_event: true,
-        max_events: 5,
+        max_events: 0, // 0 = show all events
         entities: null,
         ...config,
       };
@@ -296,7 +296,10 @@
 
       let eventsHtml = "";
       if (this._expanded.has(state.entity_id)) {
-        const events = (attrs.events || []).slice(0, this._config.max_events || 5);
+        const allEvents = attrs.events || [];
+        const limit = this._config.max_events;
+        // 0 (or unset) shows every event; a positive number caps the list.
+        const events = limit && limit > 0 ? allEvents.slice(0, limit) : allEvents;
         if (events.length) {
           eventsHtml = `<div class="events">${events
             .map(
@@ -454,21 +457,21 @@
             show_add_form: "Показывать форму добавления",
             show_track_number: "Показывать трек-номер",
             show_last_event: "Показывать время последнего события",
-            max_events: "Событий в истории",
+            max_events: "Событий в истории (0 = все)",
           }
         : {
             title: "Title",
             show_add_form: "Show add form",
             show_track_number: "Show tracking number",
             show_last_event: "Show last event time",
-            max_events: "Events in history",
+            max_events: "Events in history (0 = all)",
           };
       this._form.hass = this._hass;
       this._form.data = {
         show_add_form: true,
         show_track_number: true,
         show_last_event: true,
-        max_events: 5,
+        max_events: 0,
         ...this._config,
       };
       this._form.schema = [
@@ -476,7 +479,7 @@
         { name: "show_add_form", selector: { boolean: {} } },
         { name: "show_track_number", selector: { boolean: {} } },
         { name: "show_last_event", selector: { boolean: {} } },
-        { name: "max_events", selector: { number: { min: 1, max: 20, mode: "box" } } },
+        { name: "max_events", selector: { number: { min: 0, max: 60, mode: "box" } } },
       ];
       this._form.computeLabel = (schema) => labels[schema.name] || schema.name;
     }
