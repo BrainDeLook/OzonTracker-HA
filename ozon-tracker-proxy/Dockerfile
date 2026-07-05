@@ -12,6 +12,7 @@ COPY app.py run.sh ./
 RUN chmod a+x run.sh
 
 ENV PORT=8080
+ENV PYTHONUNBUFFERED=1
 EXPOSE 8080
 
 # Healthcheck for standalone Docker (Supervisor uses its own watchdog).

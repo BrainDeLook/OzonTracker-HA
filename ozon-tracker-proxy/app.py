@@ -87,14 +87,35 @@ class TrackingBrowser:
         self._ctx: BrowserContext | None = None
         self._lock = asyncio.Lock()
 
+    @property
+    def ready(self) -> bool:
+        return self._ctx is not None
+
     async def start(self) -> None:
         self._pw = await async_playwright().start()
         # A headless browser is trivially detected by anti-bots. When a display
-        # is available (run.sh starts us under xvfb) we launch a *headed*
-        # Chromium, which is far harder to fingerprint. OZON_HEADLESS=1 forces
-        # headless if you cannot provide a display.
+        # is available (run.sh starts Xvfb) we launch a *headed* Chromium, which
+        # is far harder to fingerprint. If a headed launch fails we fall back to
+        # headless so the service still works. OZON_HEADLESS=1 forces headless.
         force = os.environ.get("OZON_HEADLESS")
-        headless = force == "1" if force else not os.environ.get("DISPLAY")
+        prefer_headless = force == "1" if force else not os.environ.get("DISPLAY")
+        try:
+            await self._launch(prefer_headless)
+        except Exception as err:  # noqa: BLE001
+            if prefer_headless:
+                raise
+            _LOGGER.warning(
+                "Headed Chromium launch failed (%s); retrying headless", err
+            )
+            await self._launch(True)
+
+    async def _launch(self, headless: bool) -> None:
+        assert self._pw is not None
+        _LOGGER.info(
+            "Launching Chromium (headless=%s, display=%s)",
+            headless,
+            os.environ.get("DISPLAY") or "none",
+        )
         self._browser = await self._pw.chromium.launch(
             headless=headless,
             args=[
@@ -114,11 +135,7 @@ class TrackingBrowser:
         )
         await self._ctx.add_init_script(STEALTH_JS)
         self._ctx.set_default_navigation_timeout(NAV_TIMEOUT)
-        _LOGGER.info(
-            "Chromium context ready (headless=%s, display=%s)",
-            headless,
-            os.environ.get("DISPLAY") or "none",
-        )
+        _LOGGER.info("Chromium context ready (headless=%s)", headless)
 
     async def close(self) -> None:
         for closer in (
@@ -235,6 +252,10 @@ async def handle_track(request: web.Request) -> web.Response:
     track = request.match_info["track"].strip()
     if not track:
         return web.json_response({"error": "empty tracking number"}, status=400)
+    if not browser.ready:
+        return web.json_response(
+            {"error": "browser not started; check the add-on log"}, status=503
+        )
     status, body = await browser.fetch(track)
     if status == 200:
         return web.Response(
@@ -253,7 +274,14 @@ async def handle_health(_request: web.Request) -> web.Response:
 
 
 async def on_startup(_app: web.Application) -> None:
-    await browser.start()
+    # Never let a browser launch failure prevent the HTTP server from starting:
+    # /healthz stays up and /track returns a clear 503 so the problem is visible.
+    try:
+        await browser.start()
+    except Exception:  # noqa: BLE001
+        _LOGGER.exception(
+            "Browser failed to start; /track will return 503 until this is fixed"
+        )
 
 
 async def on_cleanup(_app: web.Application) -> None:

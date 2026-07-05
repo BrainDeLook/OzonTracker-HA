@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.1
+
+- Fix the add-on hanging at start with only `starting under xvfb` in the log
+  and no HTTP server: replace the flaky `xvfb-run` wrapper with an explicit
+  `Xvfb :99` launch, and run Python unbuffered so logs appear immediately.
+- Browser launch failures no longer take down the HTTP server: `/healthz`
+  stays up and `/track` returns HTTP 503 with a clear message.
+- Headed launch now falls back to headless automatically if it fails.
+
 ## 0.7.0
 
 - Solve the anti-bot challenge far more reliably: run a **headed** Chromium
