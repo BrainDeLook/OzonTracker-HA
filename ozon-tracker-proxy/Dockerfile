@@ -1,6 +1,8 @@
 # Works both as a Home Assistant add-on (Supervisor passes BUILD_FROM from
 # build.yaml) and as a plain Docker image (the default below is used).
-ARG BUILD_FROM=mcr.microsoft.com/playwright/python:v1.48.0-jammy
+# Pin to the Playwright version whose bundled Firefox (135) matches the
+# Camoufox browser build; keep in sync with requirements.txt (playwright pin).
+ARG BUILD_FROM=mcr.microsoft.com/playwright/python:v1.51.0-jammy
 FROM ${BUILD_FROM}
 
 WORKDIR /app

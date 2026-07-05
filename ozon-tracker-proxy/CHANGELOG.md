@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.0
+
+- Fix Camoufox launch failing with `setDefaultViewport ... isMobile ... not
+  described in this scheme`: camoufox pulled the latest Playwright (1.61),
+  whose Juggler protocol does not match the Camoufox Firefox build. Pin
+  `playwright==1.51.0` (bundled Firefox 135 = Camoufox's build) and bump the
+  base image to `v1.51.0-jammy`, which also fixes the Chromium fallback.
+
 ## 0.10.2
 
 - Add a `github_token` option so the Camoufox browser can be downloaded behind
