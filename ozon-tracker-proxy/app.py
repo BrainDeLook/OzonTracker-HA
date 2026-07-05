@@ -160,21 +160,49 @@ class TrackingBrowser:
         )
         return resp.status, await resp.text()
 
-    async def _solve_via_page(self, track: str) -> tuple[int, str] | None:
-        """Load the real page so its JS solves the challenge, then read the BFF.
+    async def _settle(self, page) -> None:
+        """Wait for the page to go quiet so challenge JS can run."""
+        try:
+            await page.wait_for_load_state("networkidle", timeout=12000)
+        except Exception:  # noqa: BLE001
+            await asyncio.sleep(3)
 
-        Two ways to obtain the data are raced against the timeout:
-        1. capture a 200 BFF response the page itself makes, and
-        2. once challenge cookies exist in the context, call the BFF ourselves.
+    @staticmethod
+    async def _is_challenge_page(page) -> bool:
+        """Heuristic: are we looking at the anti-bot challenge page?"""
+        try:
+            if await page.query_selector(".challenge-data, [class*=challenge]"):
+                return True
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            title = (await page.title()) or ""
+        except Exception:  # noqa: BLE001
+            title = ""
+        low = title.lower()
+        return any(m in low for m in ("нет соединения", "challenge", "проверка"))
+
+    async def _solve_via_page(self, track: str) -> tuple[int, str] | None:
+        """Solve the anti-bot challenge with the browser, then read the BFF.
+
+        The tracking URL itself returns the anti-bot challenge page, whose JS
+        must run (and set the session cookie) before the real app loads. So we
+        warm up on the site root, let the challenge settle, then re-navigate to
+        the tracking page through the challenge, capturing the BFF response the
+        app makes (or calling the BFF ourselves once cookies are valid).
         """
         assert self._ctx is not None
         page = await self._ctx.new_page()
         captured: dict[str, Any] = {}
-        seen_statuses: list[int] = []
+        seen: list[int] = []
+        counters = {"responses": 0, "challenge_assets": 0}
 
         async def on_response(resp: Response) -> None:
+            counters["responses"] += 1
+            if "abt-challenge" in resp.url or "/challenge" in resp.url:
+                counters["challenge_assets"] += 1
             if "ozon-track-bff/tracking" in resp.url:
-                seen_statuses.append(resp.status)
+                seen.append(resp.status)
                 if resp.status == 200 and "body" not in captured:
                     try:
                         captured["body"] = await resp.text()
@@ -182,38 +210,61 @@ class TrackingBrowser:
                         pass
 
         page.on("response", on_response)
+        attempts = 0
         try:
-            await page.goto(
-                PAGE_URL.format(track=track), wait_until="domcontentloaded"
-            )
+            # 1) Warm up on the root so the challenge script runs and sets cookies.
+            try:
+                await page.goto(f"{BASE}/", wait_until="domcontentloaded")
+                await self._settle(page)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug("Root warm-up failed: %s", err)
+
+            # 2) Load the tracking page, re-navigating through the challenge.
             deadline = time.monotonic() + NAV_TIMEOUT / 1000
-            while time.monotonic() < deadline:
+            while time.monotonic() < deadline and "body" not in captured:
+                attempts += 1
+                try:
+                    await page.goto(
+                        PAGE_URL.format(track=track), wait_until="domcontentloaded"
+                    )
+                    await self._settle(page)
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.debug("Nav attempt %s failed: %s", attempts, err)
+
                 if "body" in captured:
                     break
-                # The page may have solved the challenge (cookies set) without
-                # yet firing the BFF call for us to capture -> ask ourselves.
-                try:
-                    status, body = await self._api_request(track)
-                    if status == 200:
-                        captured["body"] = body
-                        break
-                    if status == 404:
-                        return 404, body
-                except Exception:  # noqa: BLE001
-                    pass
-                await asyncio.sleep(1.5)
+                if not await self._is_challenge_page(page):
+                    # Challenge cleared: cookies are valid, fetch it ourselves.
+                    try:
+                        status, body = await self._api_request(track)
+                        if status == 200:
+                            captured["body"] = body
+                            break
+                        if status == 404:
+                            return 404, body
+                    except Exception:  # noqa: BLE001
+                        pass
+                    # Give the app a moment to fire its own BFF call.
+                    await asyncio.sleep(2)
+                else:
+                    await asyncio.sleep(2)
 
             _LOGGER.info(
-                "Solve %s: final_url=%s bff_statuses=%s solved=%s",
+                "Solve %s: final_url=%s bff=%s responses=%s challenge_assets=%s "
+                "attempts=%s solved=%s",
                 track,
                 page.url,
-                seen_statuses or "none",
+                seen or "none",
+                counters["responses"],
+                counters["challenge_assets"],
+                attempts,
                 "body" in captured,
             )
             if "body" not in captured and DEBUG:
                 try:
+                    title = await page.title()
                     html = await page.content()
-                    _LOGGER.info("DEBUG %s page[:1000]=%r", track, html[:1000])
+                    _LOGGER.info("DEBUG %s title=%r page[:3000]=%r", track, title, html[:3000])
                 except Exception:  # noqa: BLE001
                     pass
         except Exception as err:  # noqa: BLE001

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.2
+
+- The tracking URL serves the anti-bot challenge page directly, so change the
+  solve flow: warm up on the site root, wait for the network to settle so the
+  challenge JS can set its cookie, then re-navigate to the tracking page
+  through the challenge (retry loop) and capture the app's BFF response.
+- Richer diagnostics: log total responses, challenge-asset count and attempts;
+  dump more of the challenge page HTML (3000 chars) in `debug` mode.
+
 ## 0.7.1
 
 - Fix the add-on hanging at start with only `starting under xvfb` in the log
