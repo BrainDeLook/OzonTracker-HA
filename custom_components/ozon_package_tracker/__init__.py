@@ -89,6 +89,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    # Refresh the Lovelace resource version so card updates reach the browser
+    # on a reload, not only on a full Home Assistant restart.
+    await _async_setup_frontend(hass)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     return True
 
@@ -178,21 +181,24 @@ def _async_register_services(hass: HomeAssistant) -> None:
 
 
 async def _async_setup_frontend(hass: HomeAssistant) -> None:
-    """Serve the bundled Lovelace card and register it as a resource."""
-    flag = f"{DOMAIN}_frontend_registered"
-    if hass.data.get(flag):
-        return
-    hass.data[flag] = True
+    """Serve the bundled Lovelace card and (re)register it as a resource.
 
+    The static path is registered only once, but the resource ``?v=`` is
+    refreshed on every call (including config-entry reloads), so a new card
+    version reaches the browser without a full Home Assistant restart.
+    """
     card_dir = Path(__file__).parent / "lovelace"
-    try:
-        from homeassistant.components.http import StaticPathConfig
+    static_flag = f"{DOMAIN}_static_registered"
+    if not hass.data.get(static_flag):
+        hass.data[static_flag] = True
+        try:
+            from homeassistant.components.http import StaticPathConfig
 
-        await hass.http.async_register_static_paths(
-            [StaticPathConfig(FRONTEND_URL_BASE, str(card_dir), False)]
-        )
-    except ImportError:
-        hass.http.register_static_path(FRONTEND_URL_BASE, str(card_dir), False)
+            await hass.http.async_register_static_paths(
+                [StaticPathConfig(FRONTEND_URL_BASE, str(card_dir), False)]
+            )
+        except ImportError:
+            hass.http.register_static_path(FRONTEND_URL_BASE, str(card_dir), False)
 
     integration = await async_get_integration(hass, DOMAIN)
     version = integration.version or "0"
