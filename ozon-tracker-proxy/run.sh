@@ -31,6 +31,9 @@ if [ -f "${OPTIONS}" ]; then
 
   ENGINE_OPT="$(opt engine camoufox)"
   [ -n "${ENGINE_OPT}" ] && export OZON_ENGINE="${ENGINE_OPT}"
+
+  TOKEN_OPT="$(opt github_token '')"
+  [ -n "${TOKEN_OPT}" ] && export GITHUB_TOKEN="${TOKEN_OPT}"
 fi
 
 # Make Python log lines appear immediately in the add-on log.
@@ -48,12 +51,24 @@ if [ "${ENGINE}" = "camoufox" ]; then
   mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}"
   CAMDIR="${XDG_CACHE_HOME:-$HOME/.cache}/camoufox"
   if [ ! -d "${CAMDIR}" ] || [ -z "$(ls -A "${CAMDIR}" 2>/dev/null)" ]; then
+    # camoufox fetch queries api.github.com (60 req/h per IP unauthenticated —
+    # a hard blocker behind CGNAT). A GitHub token raises the limit to 5000/h;
+    # feed it via ~/.netrc so camoufox's plain requests calls are authenticated.
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+      { echo "machine api.github.com login x-access-token password ${GITHUB_TOKEN}";
+        echo "machine github.com login x-access-token password ${GITHUB_TOKEN}";
+        echo "machine codeload.github.com login x-access-token password ${GITHUB_TOKEN}";
+      } > "$HOME/.netrc"
+      chmod 600 "$HOME/.netrc"
+      echo "[ozon-tracker-proxy] using GitHub token for camoufox download"
+    fi
     echo "[ozon-tracker-proxy] Camoufox browser not cached; fetching (first run)..."
     for i in 1 2 3 4 5; do
       if python3 -m camoufox fetch; then break; fi
       echo "[ozon-tracker-proxy] camoufox fetch failed (attempt $i, GitHub rate limit?); retry in 45s"
       sleep 45
     done || true
+    rm -f "$HOME/.netrc"
   else
     echo "[ozon-tracker-proxy] Camoufox browser found in cache"
   fi

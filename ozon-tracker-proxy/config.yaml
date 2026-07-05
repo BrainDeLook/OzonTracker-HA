@@ -1,5 +1,5 @@
 name: Ozon Tracker Proxy
-version: "0.10.1"
+version: "0.10.2"
 slug: ozon_tracker_proxy
 description: >-
   Headless-browser proxy that solves the tracking.ozon.ru anti-bot challenge
@@ -20,12 +20,14 @@ ports_description:
 webui: "http://[HOST]:[PORT:8080]/healthz"
 options:
   engine: camoufox
+  github_token: ""
   log_level: info
   app_version: release/TPLAPI-5269
   nav_timeout_ms: 60000
   debug: false
 schema:
   engine: list(camoufox|chromium)?
+  github_token: str?
   log_level: list(trace|debug|info|notice|warning|error|fatal)?
   app_version: str?
   nav_timeout_ms: int(10000,180000)?

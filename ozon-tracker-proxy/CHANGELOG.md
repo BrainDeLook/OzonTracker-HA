@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.2
+
+- Add a `github_token` option so the Camoufox browser can be downloaded behind
+  CGNAT, where the unauthenticated GitHub API limit (60 req/h per shared IP) is
+  exhausted. The token (no scopes needed) is fed via `~/.netrc` and raises the
+  limit to 5000/h; it is used only for the one-time browser download.
+
 ## 0.10.1
 
 - Fix the add-on build failing at `camoufox fetch` with GitHub API

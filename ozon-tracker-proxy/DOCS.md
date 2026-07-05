@@ -29,6 +29,7 @@ automatically, then serves the tracking data to the integration.
 | Option | Default | Description |
 |---|---|---|
 | `engine` | `camoufox` | Browser engine: `camoufox` (anti-detect Firefox) or `chromium`. |
+| `github_token` | _(empty)_ | GitHub personal access token used only to download the Camoufox browser. Needed if the first-run download fails with a GitHub API "rate limit exceeded" (common behind CGNAT). Create one at github.com → Settings → Developer settings → Personal access tokens → **no scopes required** (public read). |
 | `log_level` | `info` | Log verbosity (`trace`…`fatal`). |
 | `app_version` | `release/TPLAPI-5269` | Value of the `x-o3-app-version` header the browser sends. Update if Ozon starts rejecting it. |
 | `nav_timeout_ms` | `60000` | Page navigation / challenge-solving timeout in ms. Raise it (e.g. `120000`) if the challenge needs longer. |
