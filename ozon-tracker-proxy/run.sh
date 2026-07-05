@@ -38,6 +38,27 @@ export PYTHONUNBUFFERED=1
 
 ENGINE="${OZON_ENGINE:-camoufox}"
 
+# The Camoufox browser is fetched at runtime (not at build) so the image builds
+# even when GitHub's API rate limit blocks the download (common behind CGNAT).
+# Cache it in persistent /data so it is downloaded once and reused after that.
+if [ "${ENGINE}" = "camoufox" ]; then
+  if [ -d /data ] && [ -w /data ]; then
+    export XDG_CACHE_HOME=/data/.cache
+  fi
+  mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}"
+  CAMDIR="${XDG_CACHE_HOME:-$HOME/.cache}/camoufox"
+  if [ ! -d "${CAMDIR}" ] || [ -z "$(ls -A "${CAMDIR}" 2>/dev/null)" ]; then
+    echo "[ozon-tracker-proxy] Camoufox browser not cached; fetching (first run)..."
+    for i in 1 2 3 4 5; do
+      if python3 -m camoufox fetch; then break; fi
+      echo "[ozon-tracker-proxy] camoufox fetch failed (attempt $i, GitHub rate limit?); retry in 45s"
+      sleep 45
+    done || true
+  else
+    echo "[ozon-tracker-proxy] Camoufox browser found in cache"
+  fi
+fi
+
 # The camoufox engine manages its own virtual display (headless="virtual").
 # For the Chromium fallback we start our own Xvfb so it can run *headed*
 # (far less detectable than headless); app.py auto-detects DISPLAY.

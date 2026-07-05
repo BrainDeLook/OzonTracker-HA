@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.10.1
+
+- Fix the add-on build failing at `camoufox fetch` with GitHub API
+  "rate limit exceeded" (hits unauthenticated 60 req/h per IP, common behind
+  CGNAT). The Camoufox browser is no longer downloaded at build time.
+- Instead it is fetched at first run into the persistent `/data` cache
+  (`XDG_CACHE_HOME`), retried across restarts until it succeeds, then reused.
+- While Camoufox isn't available yet, the service falls back to the `chromium`
+  engine so it still builds, starts and answers.
+
 ## 0.10.0
 
 - Add a **camoufox** (anti-detect Firefox) engine and make it the default,

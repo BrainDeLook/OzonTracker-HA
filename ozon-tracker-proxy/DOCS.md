@@ -46,6 +46,13 @@ clear, then reads the tracking JSON. The browser profile is kept in
 The `engine` option switches between `camoufox` (default) and `chromium` (the
 older patchright/Playwright path) if you want to compare.
 
+**First run:** the Camoufox browser (~130 MB) is downloaded on first start into
+the persistent `/data` cache (not at build time, to avoid GitHub API rate
+limits behind CGNAT). Watch the log for `fetching (first run)`. If it hits a
+GitHub rate limit it retries and will succeed on a later start (the limit
+resets hourly); meanwhile the add-on falls back to the `chromium` engine so it
+still answers. Once cached, it is reused with no further downloads.
+
 ## Verifying it works
 
 From any machine on your network:

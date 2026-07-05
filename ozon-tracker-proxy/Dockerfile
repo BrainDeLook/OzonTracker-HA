@@ -9,9 +9,13 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 # camoufox needs PyYAML with the libyaml C extension (CLoader).
 RUN pip install --no-cache-dir --force-reinstall pyyaml
-# Fetch the Camoufox (patched Firefox) binary and fingerprint data.
-RUN python -m camoufox fetch
-# The base image already ships Chromium + Playwright for the fallback engine.
+
+# NOTE: the Camoufox browser is NOT fetched at build time on purpose.
+# `camoufox fetch` queries the GitHub API (rate-limited to 60 req/h per IP for
+# unauthenticated callers — a hard blocker behind CGNAT). Instead run.sh fetches
+# it at runtime into the persistent /data cache, retrying across restarts until
+# it succeeds, then reusing it forever. The base image already ships Chromium +
+# Playwright for the `chromium` fallback engine, so the add-on works meanwhile.
 
 COPY app.py run.sh ./
 RUN chmod a+x run.sh

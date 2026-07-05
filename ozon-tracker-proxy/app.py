@@ -124,11 +124,30 @@ class TrackingBrowser:
 
     async def start(self) -> None:
         if ENGINE == "camoufox" and _HAS_CAMOUFOX:
-            await self._start_camoufox()
-        else:
-            if ENGINE == "camoufox":
-                _LOGGER.warning("camoufox not available; falling back to Chromium")
-            await self._start_chromium()
+            try:
+                await self._start_camoufox()
+                return
+            except Exception as err:  # noqa: BLE001
+                # Most likely the Camoufox browser isn't fetched yet (GitHub
+                # rate limit). Fall back to Chromium so the service still runs.
+                _LOGGER.warning(
+                    "Camoufox launch failed (%s); falling back to Chromium. "
+                    "It will use Camoufox once the browser is fetched (restart).",
+                    err,
+                )
+                await self._safe_close_camoufox()
+        elif ENGINE == "camoufox":
+            _LOGGER.warning("camoufox package not available; falling back to Chromium")
+        await self._start_chromium()
+
+    async def _safe_close_camoufox(self) -> None:
+        if self._cam is not None:
+            try:
+                await self._cam.__aexit__(None, None, None)
+            except Exception:  # noqa: BLE001
+                pass
+            self._cam = None
+            self._ctx = None
 
     async def _start_camoufox(self) -> None:
         # headless="virtual" runs a *headed* Firefox under Camoufox's own Xvfb
