@@ -27,13 +27,18 @@ from typing import Any
 from urllib.parse import quote
 
 from aiohttp import web
-from playwright.async_api import (
-    Browser,
-    BrowserContext,
-    Playwright,
-    Response,
-    async_playwright,
-)
+
+# patchright is a drop-in, undetected fork of Playwright: it avoids the
+# CDP Runtime.enable leak that anti-bots (like Ozon's abt-challenge) use to
+# spot automation. Prefer it; fall back to vanilla Playwright if unavailable.
+try:
+    from patchright.async_api import BrowserContext, Playwright, Response, async_playwright
+
+    PATCHED = True
+except ImportError:  # pragma: no cover
+    from playwright.async_api import BrowserContext, Playwright, Response, async_playwright
+
+    PATCHED = False
 
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO"),
@@ -60,30 +65,38 @@ NAV_TIMEOUT = int(os.environ.get("OZON_NAV_TIMEOUT_MS") or "60000")
 PORT = int(os.environ.get("PORT", "8080"))
 DEBUG = os.environ.get("OZON_DEBUG", "").lower() in ("1", "true", "yes")
 
-# Stealth patches applied to every page before any site script runs, so the
-# anti-bot sees a normal browser rather than an automated one.
+# Minimal stealth patches, only used on the vanilla-Playwright fallback.
+# patchright already handles these (and the CDP leaks) itself, so we must NOT
+# add them there — a double patch can itself become a detection signal.
 STEALTH_JS = """
 Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
 Object.defineProperty(navigator, 'languages', {get: () => ['ru-RU','ru','en-US','en']});
-Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});
 window.chrome = window.chrome || { runtime: {} };
-const _q = window.navigator.permissions && window.navigator.permissions.query;
-if (_q) {
-  window.navigator.permissions.query = (p) => (
-    p && p.name === 'notifications'
-      ? Promise.resolve({state: Notification.permission})
-      : _q(p)
-  );
-}
 """
 
 
+def _profile_dir() -> str:
+    """A writable directory to persist the browser profile (and its cookies).
+
+    In the Home Assistant add-on /data persists across restarts, so a solved
+    anti-bot session survives; otherwise fall back to /tmp.
+    """
+    for candidate in (os.environ.get("OZON_PROFILE_DIR"), "/data/ozon-profile", "/tmp/ozon-profile"):
+        if not candidate:
+            continue
+        try:
+            os.makedirs(candidate, exist_ok=True)
+            return candidate
+        except Exception:  # noqa: BLE001
+            continue
+    return "/tmp/ozon-profile"
+
+
 class TrackingBrowser:
-    """Owns a single Chromium context and serves tracking lookups from it."""
+    """Owns a single persistent Chromium context and serves lookups from it."""
 
     def __init__(self) -> None:
         self._pw: Playwright | None = None
-        self._browser: Browser | None = None
         self._ctx: BrowserContext | None = None
         self._lock = asyncio.Lock()
 
@@ -93,10 +106,9 @@ class TrackingBrowser:
 
     async def start(self) -> None:
         self._pw = await async_playwright().start()
-        # A headless browser is trivially detected by anti-bots. When a display
-        # is available (run.sh starts Xvfb) we launch a *headed* Chromium, which
-        # is far harder to fingerprint. If a headed launch fails we fall back to
-        # headless so the service still works. OZON_HEADLESS=1 forces headless.
+        # A headless browser is trivially detected. When a display is available
+        # (run.sh starts Xvfb) launch a *headed* Chromium; fall back to headless
+        # if that fails. OZON_HEADLESS=1 forces headless.
         force = os.environ.get("OZON_HEADLESS")
         prefer_headless = force == "1" if force else not os.environ.get("DISPLAY")
         try:
@@ -104,43 +116,37 @@ class TrackingBrowser:
         except Exception as err:  # noqa: BLE001
             if prefer_headless:
                 raise
-            _LOGGER.warning(
-                "Headed Chromium launch failed (%s); retrying headless", err
-            )
+            _LOGGER.warning("Headed launch failed (%s); retrying headless", err)
             await self._launch(True)
 
     async def _launch(self, headless: bool) -> None:
         assert self._pw is not None
         _LOGGER.info(
-            "Launching Chromium (headless=%s, display=%s)",
+            "Launching Chromium (patchright=%s, headless=%s, display=%s)",
+            PATCHED,
             headless,
             os.environ.get("DISPLAY") or "none",
         )
-        self._browser = await self._pw.chromium.launch(
+        # A persistent context keeps the solved anti-bot cookies on disk, so
+        # repeated lookups (and restarts) reuse the same session.
+        self._ctx = await self._pw.chromium.launch_persistent_context(
+            user_data_dir=_profile_dir(),
             headless=headless,
-            args=[
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-blink-features=AutomationControlled",
-                "--disable-features=IsolateOrigins,site-per-process",
-                "--window-size=1280,800",
-            ],
-        )
-        self._ctx = await self._browser.new_context(
             user_agent=USER_AGENT,
             locale="ru-RU",
             timezone_id="Europe/Moscow",
-            viewport={"width": 1280, "height": 800},
+            no_viewport=True,
             extra_http_headers={"Accept-Language": "ru,en;q=0.9"},
+            args=["--no-sandbox", "--disable-dev-shm-usage"],
         )
-        await self._ctx.add_init_script(STEALTH_JS)
+        if not PATCHED:
+            await self._ctx.add_init_script(STEALTH_JS)
         self._ctx.set_default_navigation_timeout(NAV_TIMEOUT)
-        _LOGGER.info("Chromium context ready (headless=%s)", headless)
+        _LOGGER.info("Chromium context ready (patchright=%s, headless=%s)", PATCHED, headless)
 
     async def close(self) -> None:
         for closer in (
             getattr(self._ctx, "close", None),
-            getattr(self._browser, "close", None),
             getattr(self._pw, "stop", None),
         ):
             if closer is None:

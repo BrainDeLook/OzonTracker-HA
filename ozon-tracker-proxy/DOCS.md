@@ -35,10 +35,12 @@ automatically, then serves the tracking data to the integration.
 
 ## How it gets past the anti-bot
 
-A headless browser is easy for the anti-bot to spot, so the add-on runs a
-**headed** Chromium under a virtual display (xvfb) with stealth patches
-applied. It loads the tracking page, lets the challenge JavaScript run and
-solve, then reads the tracking JSON with the resulting session cookies.
+Ozon's challenge detects ordinary automation (e.g. Playwright's CDP
+`Runtime.enable` leak), so the add-on drives Chromium with **patchright** — an
+undetected fork of Playwright — running **headed** under a virtual display
+(xvfb). It loads the tracking page, lets the challenge JavaScript run and set
+its cookie, then reads the tracking JSON. The browser profile is kept in
+`/data/ozon-profile`, so a solved session survives add-on restarts.
 
 ## Verifying it works
 

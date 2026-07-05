@@ -1,5 +1,5 @@
 name: Ozon Tracker Proxy
-version: "0.7.2"
+version: "0.8.0"
 slug: ozon_tracker_proxy
 description: >-
   Headless-browser proxy that solves the tracking.ozon.ru anti-bot challenge

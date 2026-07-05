@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.0
+
+- Switch the browser engine to **patchright**, an undetected fork of
+  Playwright, because Ozon's abt-challenge detected vanilla Playwright's CDP
+  `Runtime.enable` leak (the challenge assets loaded and JS ran, but never
+  cleared, even though a normal browser on the same network passes).
+- Use a **persistent browser profile** (`/data/ozon-profile` in the add-on)
+  so a solved anti-bot session and its cookies survive restarts and are
+  reused across lookups.
+- Drop the aggressive launch flags and manual stealth script when patchright
+  is active (it handles those itself; a double patch is itself detectable).
+- The base image only provides Python/xvfb/system libs now — the browser
+  comes from `patchright install chromium` in the Dockerfile.
+
 ## 0.7.2
 
 - The tracking URL serves the anti-bot challenge page directly, so change the
