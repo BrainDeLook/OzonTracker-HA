@@ -19,12 +19,16 @@
           "link_target": "\"Open tracking page\" link",
           "update_interval": "Update interval (minutes)",
           "auto_delete_days": "Auto-delete delivered packages after (days, 0 = never)",
+          "notify_targets": "Notify devices",
+          "notify_level": "Notification level",
           "cookie": "Cookie header (source: Ozon)"
         },
         "data_description": {
           "source": "track365 (recommended): query track365.ru — works out of the box. Ozon: query tracking.ozon.ru directly, which requires a browser cookie because of the anti-bot.",
           "verify_ssl": "SSL verification is automatic: if track365's certificate is expired/invalid, the integration retries without it. Turn this off only to skip verification from the very first request.",
           "link_target": "Where the card's 'Open tracking page' button and the tracking_url attribute point to. Independent of the data source above — e.g. fetch data via track365 but open Ozon's page, or the other way round.",
+          "notify_targets": "Devices/services (Home Assistant notify entities, e.g. your phone's mobile app) to push status-change notifications to. Leave empty to disable notifications.",
+          "notify_level": "Which status changes send a notification.",
           "cookie": "Only used with source Ozon: the 'cookie' request header from a browser that opened tracking.ozon.ru (it expires and must be refreshed periodically)."
         }
       }
@@ -42,6 +46,12 @@
         "auto": "Same as data source",
         "track365": "Always track365.ru",
         "ozon": "Always tracking.ozon.ru"
+      }
+    },
+    "notify_level": {
+      "options": {
+        "all": "Every status change",
+        "pickup": "Only pickup point arrival"
       }
     }
   },

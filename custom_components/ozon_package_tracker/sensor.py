@@ -20,6 +20,7 @@ from .const import (
     DOMAIN,
     LINK_TARGET_OZON,
     LINK_TARGET_TRACK365,
+    PICKUP_STATUS_KEYWORDS,
     TRACK365_PAGE_URL,
     TRACKING_PAGE_URL,
 )
@@ -121,7 +122,7 @@ class OzonPackageSensor(
             for word in ("отмен", "возврат", "возвращ", "отказ", "cancel", "return")
         ):
             return "mdi:package-variant-remove"
-        if any(word in status for word in ("выдач", "пункт", "постамат", "pickup")):
+        if any(word in status for word in PICKUP_STATUS_KEYWORDS):
             return "mdi:package-down"
         if not status:
             return "mdi:package-variant-closed"

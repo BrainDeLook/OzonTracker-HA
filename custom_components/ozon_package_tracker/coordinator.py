@@ -19,11 +19,16 @@ from homeassistant.util import slugify
 from .api import OzonTrackingApi, OzonTrackingApiError
 from .const import (
     CONF_AUTO_DELETE_DAYS,
+    CONF_NOTIFY_LEVEL,
+    CONF_NOTIFY_TARGETS,
     CONF_UPDATE_INTERVAL,
     DEFAULT_AUTO_DELETE_DAYS,
+    DEFAULT_NOTIFY_LEVEL,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     EVENT_DATA_UPDATED,
+    NOTIFY_LEVEL_ALL,
+    PICKUP_STATUS_KEYWORDS,
     STORAGE_KEY,
     STORAGE_VERSION,
 )
@@ -34,6 +39,12 @@ TRACKING_NUMBER_RE = re.compile(r"[0-9A-Za-zА-Яа-я][0-9A-Za-zА-Яа-я\-_/ 
 
 # Pause between per-package requests so we do not hammer the service.
 REQUEST_SPACING = 1.5
+
+
+def _is_pickup_status(status: str) -> bool:
+    """Whether a status text means "ready at a pickup point/locker"."""
+    lowered = status.lower()
+    return any(word in lowered for word in PICKUP_STATUS_KEYWORDS)
 
 
 class OzonPackageCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
@@ -76,6 +87,25 @@ class OzonPackageCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
 
     async def _async_save(self) -> None:
         await self._store.async_save({"packages": self._packages})
+
+    async def _async_notify(
+        self, targets: list[str], title: str, message: str
+    ) -> None:
+        """Push a status-change notification to each configured notify entity."""
+        for entity_id in targets:
+            try:
+                await self.hass.services.async_call(
+                    "notify",
+                    "send_message",
+                    {"entity_id": entity_id, "title": title, "message": message},
+                    blocking=False,
+                )
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.warning(
+                    "Could not send Ozon package notification to %s: %s",
+                    entity_id,
+                    err,
+                )
 
     async def _async_update_data(self) -> dict[str, dict[str, Any]]:
         now = dt_util.utcnow()
@@ -135,6 +165,9 @@ class OzonPackageCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 "last_success": meta.get("last_success"),
             }
 
+        notify_targets = options.get(CONF_NOTIFY_TARGETS) or []
+        notify_level = options.get(CONF_NOTIFY_LEVEL, DEFAULT_NOTIFY_LEVEL)
+
         previous = self.data or {}
         for track, new_info in results.items():
             old_status = (previous.get(track) or {}).get("status")
@@ -150,6 +183,13 @@ class OzonPackageCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                         "delivered": new_info.get("delivered", False),
                     },
                 )
+                if notify_targets and (
+                    notify_level == NOTIFY_LEVEL_ALL
+                    or _is_pickup_status(new_status)
+                ):
+                    await self._async_notify(
+                        notify_targets, new_info.get("title") or track, new_status
+                    )
 
         if store_dirty:
             await self._async_save()

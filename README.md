@@ -62,6 +62,8 @@
 | **Ссылка «Открыть страницу трекинга»** | как источник данных | Куда ведёт кнопка в карточке (см. ниже). |
 | **Интервал обновления** | 60 мин | Как часто опрашивать сервис. |
 | **Автоудаление доставленных** | 0 (выкл.) | Удалять доставленные посылки через N дней. |
+| **Устройства для уведомлений** | — | Куда слать push‑уведомления о смене статуса (см. ниже). |
+| **Уровень уведомлений** | Каждая смена статуса | Какие статусы уведомлять (см. ниже). |
 | **Заголовок Cookie** | — | Только для источника Ozon (см. ниже). |
 
 ### Источник данных
@@ -87,6 +89,21 @@
   данные берутся напрямую с Ozon.
 - **Всегда tracking.ozon.ru** — кнопка всегда открывает Ozon, даже если
   данные берутся через track365.
+
+### Push‑уведомления о смене статуса
+
+- **Устройства для уведомлений** — выберите одну или несколько сущностей
+  `notify.*` (например, мобильное приложение Home Assistant на телефоне).
+  Поле пустое по умолчанию — уведомления выключены, пока не выбрано хотя бы
+  одно устройство.
+- **Уровень уведомлений**:
+  - **Каждая смена статуса** (по умолчанию) — уведомление на любое изменение
+    статуса посылки.
+  - **Только прибытие в пункт выдачи** — уведомление придёт только тогда,
+    когда посылка добралась до пункта выдачи/постамата, остальные смены
+    статуса молча пропускаются.
+- В заголовке уведомления — название посылки (как задано при добавлении),
+  в тексте — новый статус.
 
 ## 🃏 Карточка Lovelace
 
@@ -174,5 +191,9 @@ card on a dashboard.
   the card's button (and `tracking_url` attribute) to always open track365.ru
   or tracking.ozon.ru, or leave it on `auto` to follow whichever source
   actually produced the data.
+- **Push notifications**: pick one or more `notify.*` entities (e.g. your
+  phone's mobile app) and a notification level — every status change, or only
+  when the parcel reaches a pickup point/locker. Empty by default (disabled).
+  The notification title is the package's friendly name.
 - Note: both services only serve Russian IPs; run Home Assistant on a Russian
   residential connection.

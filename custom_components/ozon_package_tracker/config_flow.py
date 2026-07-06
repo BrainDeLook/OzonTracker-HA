@@ -19,11 +19,14 @@ from .const import (
     CONF_AUTO_DELETE_DAYS,
     CONF_COOKIE,
     CONF_LINK_TARGET,
+    CONF_NOTIFY_LEVEL,
+    CONF_NOTIFY_TARGETS,
     CONF_SOURCE,
     CONF_UPDATE_INTERVAL,
     CONF_VERIFY_SSL,
     DEFAULT_AUTO_DELETE_DAYS,
     DEFAULT_LINK_TARGET,
+    DEFAULT_NOTIFY_LEVEL,
     DEFAULT_SOURCE,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_VERIFY_SSL,
@@ -33,6 +36,8 @@ from .const import (
     LINK_TARGET_TRACK365,
     MAX_UPDATE_INTERVAL,
     MIN_UPDATE_INTERVAL,
+    NOTIFY_LEVEL_ALL,
+    NOTIFY_LEVEL_PICKUP,
     SOURCE_OZON,
     SOURCE_TRACK365,
 )
@@ -107,6 +112,22 @@ class OzonPackageTrackerOptionsFlow(OptionsFlow):
                         CONF_AUTO_DELETE_DAYS, DEFAULT_AUTO_DELETE_DAYS
                     ),
                 ): vol.All(vol.Coerce(int), vol.Range(min=0, max=90)),
+                vol.Optional(
+                    CONF_NOTIFY_TARGETS,
+                    default=options.get(CONF_NOTIFY_TARGETS, []),
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="notify", multiple=True)
+                ),
+                vol.Optional(
+                    CONF_NOTIFY_LEVEL,
+                    default=options.get(CONF_NOTIFY_LEVEL, DEFAULT_NOTIFY_LEVEL),
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[NOTIFY_LEVEL_ALL, NOTIFY_LEVEL_PICKUP],
+                        translation_key="notify_level",
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
                 vol.Optional(
                     CONF_COOKIE,
                     description={"suggested_value": options.get(CONF_COOKIE, "")},
