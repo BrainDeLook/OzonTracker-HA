@@ -263,11 +263,15 @@ class OzonTrackingApi:
         cookie: str | None = None,
         proxy_url: str | None = None,
         source: str = "track365",
+        verify_ssl: bool = True,
     ) -> None:
         self._session = session
         self._cookie = (cookie or "").strip() or None
         self._proxy_url = _normalize_proxy_url(proxy_url)
         self._source = (source or "track365").strip().lower()
+        # None = default verification; False = skip (e.g. track365's cert has
+        # expired). aiohttp accepts either as the request `ssl` argument.
+        self._ssl = None if verify_ssl else False
         self._warmed_up = False
         self._curl: Any | None = None
 
@@ -469,12 +473,19 @@ class OzonTrackingApi:
                 params=params,
                 headers=headers,
                 timeout=REQUEST_TIMEOUT,
+                ssl=self._ssl,
             ) as resp:
                 body = await resp.text()
                 status = resp.status
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            hint = ""
+            if "certificate" in str(err).lower() and self._ssl is not False:
+                hint = (
+                    " — track365's TLS certificate looks invalid/expired; "
+                    "turn off the 'Verify SSL certificate' option to ignore it"
+                )
             raise OzonTrackingApiError(
-                f"Could not reach track365.ru: {err.__class__.__name__}: {err}"
+                f"Could not reach track365.ru: {err.__class__.__name__}: {err}{hint}"
             ) from err
 
         if status != 200:

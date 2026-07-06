@@ -21,9 +21,11 @@ from .const import (
     CONF_PROXY_URL,
     CONF_SOURCE,
     CONF_UPDATE_INTERVAL,
+    CONF_VERIFY_SSL,
     DEFAULT_AUTO_DELETE_DAYS,
     DEFAULT_SOURCE,
     DEFAULT_UPDATE_INTERVAL,
+    DEFAULT_VERIFY_SSL,
     DOMAIN,
     SOURCE_OZON,
     SOURCE_TRACK365,
@@ -72,6 +74,10 @@ class OzonPackageTrackerOptionsFlow(OptionsFlow):
                         mode=selector.SelectSelectorMode.DROPDOWN,
                     )
                 ),
+                vol.Optional(
+                    CONF_VERIFY_SSL,
+                    default=options.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
+                ): selector.BooleanSelector(),
                 vol.Optional(
                     CONF_PROXY_URL,
                     description={"suggested_value": options.get(CONF_PROXY_URL, "")},

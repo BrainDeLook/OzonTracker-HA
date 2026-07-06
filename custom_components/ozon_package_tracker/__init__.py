@@ -25,7 +25,9 @@ from .const import (
     CONF_COOKIE,
     CONF_PROXY_URL,
     CONF_SOURCE,
+    CONF_VERIFY_SSL,
     DEFAULT_SOURCE,
+    DEFAULT_VERIFY_SSL,
     DOMAIN,
     FRONTEND_URL_BASE,
     PLATFORMS,
@@ -82,6 +84,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         cookie=entry.options.get(CONF_COOKIE),
         proxy_url=entry.options.get(CONF_PROXY_URL),
         source=entry.options.get(CONF_SOURCE, DEFAULT_SOURCE),
+        verify_ssl=entry.options.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
     )
     coordinator = OzonPackageCoordinator(hass, entry, api)
     await coordinator.async_load_store()
