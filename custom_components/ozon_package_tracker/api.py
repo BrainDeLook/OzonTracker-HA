@@ -478,11 +478,25 @@ class OzonTrackingApi:
             ) from err
 
         if status != 200:
-            raise OzonTrackingApiError(f"track365 HTTP {status}: {body[:160]!r}")
-        normalized = parse_track365(_loads(body), track)
+            raise OzonTrackingApiError(f"track365 HTTP {status}: {body[:200]!r}")
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError as err:
+            # Not JSON — track365 served something else (HTML interstitial,
+            # error page, etc.). Surface a snippet so the cause is visible.
+            raise OzonTrackingApiError(
+                f"track365 did not return JSON ({err}); body starts with "
+                f"{body[:200]!r}"
+            ) from err
+        if isinstance(payload, dict) and payload.get("status") is False:
+            raise OzonTrackingApiError(
+                f"track365 reported no result for {track} "
+                f"(unknown/expired tracking number?): {body[:200]!r}"
+            )
+        normalized = parse_track365(payload, track)
         if normalized is None:
             raise OzonTrackingApiError(
-                f"track365 returned no data for {track} (unknown tracking number?)"
+                f"track365 returned unrecognized data for {track}: {body[:200]!r}"
             )
         return normalized
 
