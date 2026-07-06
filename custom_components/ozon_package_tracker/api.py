@@ -581,7 +581,6 @@ def parse_track365(payload: Any, tracking_number: str) -> dict[str, Any] | None:
         return None
 
     events: list[dict[str, Any]] = []
-    delivered = False
     courier: str | None = None
     for item in raw_events:
         if not isinstance(item, dict):
@@ -591,10 +590,6 @@ def parse_track365(payload: Any, tracking_number: str) -> dict[str, Any] | None:
         if courier is None and item.get("courier"):
             courier = str(item["courier"])
         place = str(item.get("place") or "")
-        if place in TRACK365_DELIVERED_PLACES or any(
-            m in text.lower() for m in DELIVERED_MARKERS
-        ):
-            delivered = True
         if text:
             events.append(
                 {
@@ -604,10 +599,22 @@ def parse_track365(payload: Any, tracking_number: str) -> dict[str, Any] | None:
                 }
             )
 
+    # "Delivered" must reflect the CURRENT state, not any historical event:
+    # intermediate statuses like "Данные упаковки получены" would otherwise
+    # trigger it. track365 lists events newest-first, so the parcel is
+    # delivered only if the overall status says so or the latest event's place
+    # code is a final-delivery marker (e.g. TYP_SUCCESS).
     # track365 returns events newest-first already; keep that order.
     overall = str(data.get("status") or "").lower()
-    if overall in TRACK365_DELIVERED_STATUSES:
-        delivered = True
+    latest_place = ""
+    for item in raw_events:
+        if isinstance(item, dict):
+            latest_place = str(item.get("place") or "")
+            break
+    delivered = (
+        overall in TRACK365_DELIVERED_STATUSES
+        or latest_place in TRACK365_DELIVERED_PLACES
+    )
 
     status = events[0]["status"] if events else (data.get("status") or None)
     if status is None:
