@@ -3,6 +3,13 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/),
 версии — на [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [1.0.3] - 2026-07-06
+
+### Инфраструктура
+- Добавлен workflow автопубликации GitHub Release при изменении версии в
+  `manifest.json`. Функциональных изменений в интеграции нет — версия
+  поднята, чтобы запустить этот workflow первый раз.
+
 ## [1.0.2] - 2026-07-06
 
 ### Добавлено
@@ -140,6 +147,7 @@
 0.9.0 — упомянуто здесь только для истории, в текущем коде ничего из этого
 не осталось.
 
+[1.0.3]: https://github.com/BrainDeLook/OzonTracker-HA/releases/tag/v1.0.3
 [1.0.2]: https://github.com/BrainDeLook/OzonTracker-HA/releases/tag/v1.0.2
 [1.0.1]: https://github.com/BrainDeLook/OzonTracker-HA/releases/tag/v1.0.1
 [1.0.0]: https://github.com/BrainDeLook/OzonTracker-HA/releases/tag/v1.0.0
