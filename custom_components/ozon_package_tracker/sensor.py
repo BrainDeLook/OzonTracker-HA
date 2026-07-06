@@ -15,7 +15,11 @@ from homeassistant.util import slugify
 
 from .const import (
     ATTR_TRACKING_NUMBER,
+    CONF_LINK_TARGET,
+    DEFAULT_LINK_TARGET,
     DOMAIN,
+    LINK_TARGET_OZON,
+    LINK_TARGET_TRACK365,
     TRACK365_PAGE_URL,
     TRACKING_PAGE_URL,
 )
@@ -123,6 +127,29 @@ class OzonPackageSensor(
             return "mdi:package-variant-closed"
         return "mdi:truck-delivery-outline"
 
+    def _tracking_url(self, info: dict[str, Any]) -> str:
+        """Build the "open tracking page" URL per the link_target option.
+
+        link_target=auto (default) follows whichever source actually produced
+        the data; track365/ozon pin the link regardless of the data source,
+        so e.g. data can come from track365 while the link opens Ozon direct.
+        """
+        entry = getattr(self.coordinator, "config_entry", None)
+        link_target = (
+            entry.options.get(CONF_LINK_TARGET, DEFAULT_LINK_TARGET)
+            if entry
+            else DEFAULT_LINK_TARGET
+        )
+        if link_target == LINK_TARGET_TRACK365:
+            template = TRACK365_PAGE_URL
+        elif link_target == LINK_TARGET_OZON:
+            template = TRACKING_PAGE_URL
+        else:
+            template = (
+                TRACK365_PAGE_URL if info.get("source") == "track365" else TRACKING_PAGE_URL
+            )
+        return template.format(tracking_number=self.tracking_number)
+
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         info = self._info or {}
@@ -144,7 +171,5 @@ class OzonPackageSensor(
             "events": events,
             "added_at": info.get("added_at"),
             "last_update_success": info.get("last_success"),
-            "tracking_url": (
-                TRACK365_PAGE_URL if info.get("source") == "track365" else TRACKING_PAGE_URL
-            ).format(tracking_number=self.tracking_number),
+            "tracking_url": self._tracking_url(info),
         }

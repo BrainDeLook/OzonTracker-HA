@@ -18,14 +18,19 @@ from homeassistant.helpers import selector
 from .const import (
     CONF_AUTO_DELETE_DAYS,
     CONF_COOKIE,
+    CONF_LINK_TARGET,
     CONF_SOURCE,
     CONF_UPDATE_INTERVAL,
     CONF_VERIFY_SSL,
     DEFAULT_AUTO_DELETE_DAYS,
+    DEFAULT_LINK_TARGET,
     DEFAULT_SOURCE,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_VERIFY_SSL,
     DOMAIN,
+    LINK_TARGET_AUTO,
+    LINK_TARGET_OZON,
+    LINK_TARGET_TRACK365,
     MAX_UPDATE_INTERVAL,
     MIN_UPDATE_INTERVAL,
     SOURCE_OZON,
@@ -79,6 +84,16 @@ class OzonPackageTrackerOptionsFlow(OptionsFlow):
                     CONF_VERIFY_SSL,
                     default=options.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
                 ): selector.BooleanSelector(),
+                vol.Optional(
+                    CONF_LINK_TARGET,
+                    default=options.get(CONF_LINK_TARGET, DEFAULT_LINK_TARGET),
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[LINK_TARGET_AUTO, LINK_TARGET_TRACK365, LINK_TARGET_OZON],
+                        translation_key="link_target",
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
                 vol.Optional(
                     CONF_UPDATE_INTERVAL,
                     default=options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL),

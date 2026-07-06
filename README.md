@@ -59,6 +59,7 @@
 |---|---|---|
 | **Источник данных** | `track365` | Откуда берутся данные (см. ниже). |
 | **Проверять SSL‑сертификат** | вкл. | Обычно не трогать — проверка автоматическая. |
+| **Ссылка «Открыть страницу трекинга»** | как источник данных | Куда ведёт кнопка в карточке (см. ниже). |
 | **Интервал обновления** | 60 мин | Как часто опрашивать сервис. |
 | **Автоудаление доставленных** | 0 (выкл.) | Удалять доставленные посылки через N дней. |
 | **Заголовок Cookie** | — | Только для источника Ozon (см. ниже). |
@@ -73,6 +74,19 @@
   из браузера, где открыт tracking.ozon.ru (поле «Заголовок Cookie»). Кука
   периодически протухает и её приходится обновлять — режим для продвинутых
   пользователей.
+
+### Ссылка «Открыть страницу трекинга»
+
+Настройка **независима** от источника данных выше — можно, например, получать
+данные через track365, но по клику открывать страницу на tracking.ozon.ru,
+или наоборот:
+
+- **Как источник данных (по умолчанию)** — ссылка ведёт туда, откуда реально
+  пришли данные по конкретной посылке.
+- **Всегда track365.ru** — кнопка всегда открывает track365.ru, даже если
+  данные берутся напрямую с Ozon.
+- **Всегда tracking.ozon.ru** — кнопка всегда открывает Ozon, даже если
+  данные берутся через track365.
 
 ## 🃏 Карточка Lovelace
 
@@ -156,5 +170,9 @@ card on a dashboard.
 - `ozon_package_tracker_data_updated` event fires on status changes.
 - **Data source** option: `track365` (default, recommended) or `ozon` (direct
   `tracking.ozon.ru`, which needs a browser cookie because of the anti-bot).
+- **"Open tracking page" link** option: independent of the data source — pin
+  the card's button (and `tracking_url` attribute) to always open track365.ru
+  or tracking.ozon.ru, or leave it on `auto` to follow whichever source
+  actually produced the data.
 - Note: both services only serve Russian IPs; run Home Assistant on a Russian
   residential connection.

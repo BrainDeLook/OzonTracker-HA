@@ -13,11 +13,21 @@ CONF_AUTO_DELETE_DAYS = "auto_delete_days"
 CONF_COOKIE = "cookie"
 CONF_SOURCE = "source"
 CONF_VERIFY_SSL = "verify_ssl"
+CONF_LINK_TARGET = "link_target"
 
 SOURCE_TRACK365 = "track365"
 SOURCE_OZON = "ozon"
 DEFAULT_SOURCE = SOURCE_TRACK365
 DEFAULT_VERIFY_SSL = True
+
+# Where the card's "open tracking page" link points. "auto" follows whichever
+# source actually produced the data, independent of CONF_SOURCE — e.g. data
+# can be fetched via track365 while the link opens tracking.ozon.ru, or
+# vice versa.
+LINK_TARGET_AUTO = "auto"
+LINK_TARGET_TRACK365 = SOURCE_TRACK365
+LINK_TARGET_OZON = SOURCE_OZON
+DEFAULT_LINK_TARGET = LINK_TARGET_AUTO
 
 DEFAULT_UPDATE_INTERVAL = 60  # minutes
 MIN_UPDATE_INTERVAL = 30  # minutes (protect the upstream service)
