@@ -619,6 +619,7 @@ def parse_track365(payload: Any, tracking_number: str) -> dict[str, Any] | None:
         "estimated_delivery": None,
         "delivery_date_begin": None,
         "delivery_date_end": None,
+        "source": "track365",
     }
 
 
@@ -706,6 +707,7 @@ def parse_bff_payload(payload: Any, tracking_number: str) -> dict[str, Any] | No
         "estimated_delivery": estimated,
         "delivery_date_begin": payload.get("deliveryDateBegin"),
         "delivery_date_end": payload.get("deliveryDateEnd"),
+        "source": "ozon",
     }
 
 
@@ -920,4 +922,5 @@ def normalize_payload(payload: Any, tracking_number: str) -> dict[str, Any] | No
         "estimated_delivery": _find_first_text(payload, ETA_KEYS),
         "delivery_date_begin": None,
         "delivery_date_end": None,
+        "source": "ozon",
     }

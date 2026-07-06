@@ -36,6 +36,7 @@ SERVICE_REFRESH = "refresh"
 EVENT_DATA_UPDATED = f"{DOMAIN}_data_updated"
 
 TRACKING_PAGE_URL = "https://tracking.ozon.ru/?track={tracking_number}"
+TRACK365_PAGE_URL = "https://track365.ru/?track={tracking_number}"
 
 CARD_FILENAME = "ozon-package-card.js"
 FRONTEND_URL_BASE = f"/{DOMAIN}"

@@ -13,7 +13,12 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import slugify
 
-from .const import ATTR_TRACKING_NUMBER, DOMAIN, TRACKING_PAGE_URL
+from .const import (
+    ATTR_TRACKING_NUMBER,
+    DOMAIN,
+    TRACK365_PAGE_URL,
+    TRACKING_PAGE_URL,
+)
 from .coordinator import OzonPackageCoordinator
 
 PARALLEL_UPDATES = 0
@@ -139,7 +144,7 @@ class OzonPackageSensor(
             "events": events,
             "added_at": info.get("added_at"),
             "last_update_success": info.get("last_success"),
-            "tracking_url": TRACKING_PAGE_URL.format(
-                tracking_number=self.tracking_number
-            ),
+            "tracking_url": (
+                TRACK365_PAGE_URL if info.get("source") == "track365" else TRACKING_PAGE_URL
+            ).format(tracking_number=self.tracking_number),
         }
