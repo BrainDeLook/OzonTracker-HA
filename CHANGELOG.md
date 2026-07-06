@@ -3,6 +3,14 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/),
 версии — на [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [1.0.2] - 2026-07-06
+
+### Добавлено
+- Debug‑логи на каждой проверке посылки: реально ли был сделан запрос,
+  какой статус получен и изменился ли он с прошлого раза. Логгер —
+  `custom_components.ozon_package_tracker` (README уточняет точное имя,
+  без префикса `custom_components.` фильтр в `logger:` не сработает).
+
 ## [1.0.1] - 2026-07-06
 
 ### Исправлено
@@ -132,6 +140,7 @@
 0.9.0 — упомянуто здесь только для истории, в текущем коде ничего из этого
 не осталось.
 
+[1.0.2]: https://github.com/BrainDeLook/OzonTracker-HA/releases/tag/v1.0.2
 [1.0.1]: https://github.com/BrainDeLook/OzonTracker-HA/releases/tag/v1.0.1
 [1.0.0]: https://github.com/BrainDeLook/OzonTracker-HA/releases/tag/v1.0.0
 [0.9.4]: https://github.com/BrainDeLook/OzonTracker-HA/releases/tag/v0.9.4
