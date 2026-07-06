@@ -165,6 +165,12 @@ automation:
   IP‑адресов. Нужен российский домашний канал (не зарубежный VPN/VPS).
 - Трек‑номер — это номер отправления Ozon вида `33310100-0168-1` (виден на
   странице заказа и на [tracking.ozon.ru](https://tracking.ozon.ru/)).
+- Как только посылка помечена доставленной, интеграция перестаёт опрашивать
+  по ней сервис (и не делает этого даже при ручном вызове сервиса
+  `ozon_package_tracker.refresh`) — сенсор просто продолжает показывать
+  последний известный статус. Это экономит запросы к track365/Ozon; при
+  «Автоудалении доставленных» = 0 доставленные посылки так и останутся в
+  списке, просто без опроса.
 
 ---
 
@@ -195,5 +201,9 @@ card on a dashboard.
   phone's mobile app) and a notification level — every status change, or only
   when the parcel reaches a pickup point/locker. Empty by default (disabled).
   The notification title is the package's friendly name.
+- Once a package is marked delivered, it stops being polled entirely (even a
+  manual `ozon_package_tracker.refresh`) — the sensor just keeps showing the
+  last known status. Saves requests; with auto-delete off, delivered packages
+  simply sit there unpolled instead of being removed.
 - Note: both services only serve Russian IPs; run Home Assistant on a Russian
   residential connection.

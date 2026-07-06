@@ -47,6 +47,22 @@ def _is_pickup_status(status: str) -> bool:
     return any(word in lowered for word in PICKUP_STATUS_KEYWORDS)
 
 
+def _empty_info(track: str, *, delivered: bool = False) -> dict[str, Any]:
+    """Placeholder tracking info for a package with no data yet/available."""
+    return {
+        "tracking_number": track,
+        "status": None,
+        "status_code": None,
+        "delivered": delivered,
+        "events": [],
+        "courier": None,
+        "delivery_type": None,
+        "estimated_delivery": None,
+        "delivery_date_begin": None,
+        "delivery_date_end": None,
+    }
+
+
 class OzonPackageCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
     """Polls tracking.ozon.ru for every stored package."""
 
@@ -116,29 +132,30 @@ class OzonPackageCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         store_dirty = False
         tracks = list(self._packages)
 
-        for index, track in enumerate(tracks):
+        fetched_any = False
+        for track in tracks:
             meta = self._packages[track]
-            if index:
-                await asyncio.sleep(REQUEST_SPACING)
-            try:
-                info = await self._api.async_get_tracking(track)
-                meta["last_data"] = info
-                meta["last_success"] = now.isoformat()
-                store_dirty = True
-            except OzonTrackingApiError as err:
-                _LOGGER.warning("Could not update Ozon package %s: %s", track, err)
-                info = meta.get("last_data") or {
-                    "tracking_number": track,
-                    "status": None,
-                    "status_code": None,
-                    "delivered": False,
-                    "events": [],
-                    "courier": None,
-                    "delivery_type": None,
-                    "estimated_delivery": None,
-                    "delivery_date_begin": None,
-                    "delivery_date_end": None,
-                }
+
+            if meta.get("delivered_at"):
+                # Already delivered: the parcel is done, so keep serving the
+                # last known snapshot instead of polling a service that will
+                # not report anything new for it.
+                _LOGGER.debug(
+                    "Skipping already-delivered Ozon package %s", track
+                )
+                info = meta.get("last_data") or _empty_info(track, delivered=True)
+            else:
+                if fetched_any:
+                    await asyncio.sleep(REQUEST_SPACING)
+                fetched_any = True
+                try:
+                    info = await self._api.async_get_tracking(track)
+                    meta["last_data"] = info
+                    meta["last_success"] = now.isoformat()
+                    store_dirty = True
+                except OzonTrackingApiError as err:
+                    _LOGGER.warning("Could not update Ozon package %s: %s", track, err)
+                    info = meta.get("last_data") or _empty_info(track)
 
             if info.get("delivered"):
                 if not meta.get("delivered_at"):
