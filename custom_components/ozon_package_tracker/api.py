@@ -261,13 +261,11 @@ class OzonTrackingApi:
         self,
         session: aiohttp.ClientSession,
         cookie: str | None = None,
-        proxy_url: str | None = None,
         source: str = "track365",
         verify_ssl: bool = True,
     ) -> None:
         self._session = session
         self._cookie = (cookie or "").strip() or None
-        self._proxy_url = _normalize_proxy_url(proxy_url)
         self._source = (source or "track365").strip().lower()
         # None = default verification; False = skip (e.g. track365's cert has
         # expired). aiohttp accepts either as the request `ssl` argument.
@@ -278,10 +276,6 @@ class OzonTrackingApi:
     @property
     def uses_impersonation(self) -> bool:
         return HAS_CURL_CFFI
-
-    @property
-    def uses_proxy(self) -> bool:
-        return self._proxy_url is not None
 
     @property
     def source(self) -> str:
@@ -355,14 +349,9 @@ class OzonTrackingApi:
         track = tracking_number.strip()
 
         # Aggregator source: query track365.ru directly (no anti-bot, richer
-        # data). This is the default and needs no proxy or browser.
+        # data). This is the default and needs no cookie.
         if self._source == "track365":
             return await self._get_track365(track)
-
-        # When a headless-browser proxy is configured, it handles the anti-bot
-        # challenge for us; use it exclusively and skip the direct path.
-        if self._proxy_url is not None:
-            return await self._get_via_proxy(track)
 
         referer = f"{PAGE_URL}?track={track}"
         errors: list[str] = []
@@ -422,35 +411,6 @@ class OzonTrackingApi:
         raise OzonTrackingApiError(
             f"Could not fetch tracking data for {track}: " + "; ".join(errors)
         )
-
-    async def _get_via_proxy(self, track: str) -> dict[str, Any]:
-        """Fetch tracking data from the companion headless-browser proxy.
-
-        The proxy returns the raw Ozon BFF JSON, so the same parser applies.
-        """
-        url = f"{self._proxy_url}/track/{quote(track, safe='')}"
-        try:
-            async with self._session.get(url, timeout=REQUEST_TIMEOUT) as resp:
-                body = await resp.text()
-                status = resp.status
-        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-            raise OzonTrackingApiError(
-                f"Could not reach the Ozon tracking proxy at {self._proxy_url}: "
-                f"{err.__class__.__name__}: {err}"
-            ) from err
-
-        if status == 404:
-            raise OzonTrackingApiError(f"HTTP 404: tracking number {track} not found")
-        if status != 200:
-            raise OzonTrackingApiError(
-                f"Ozon tracking proxy returned HTTP {status}: {body[:160]!r}"
-            )
-        normalized = self._parse_payloads([_loads(body)], track)
-        if normalized is None:
-            raise OzonTrackingApiError(
-                f"Proxy returned an unrecognized payload for {track}"
-            )
-        return normalized
 
     async def _get_track365(self, track: str) -> dict[str, Any]:
         """Fetch tracking data from track365.ru (plain GET, no anti-bot)."""
@@ -577,20 +537,6 @@ class OzonTrackingApi:
         if not payloads:
             raise OzonTrackingApiError("no embedded JSON found in HTML page")
         return payloads
-
-
-def _normalize_proxy_url(proxy_url: str | None) -> str | None:
-    """Clean up a user supplied proxy URL.
-
-    Accepts values with or without a scheme (e.g. ``192.168.1.10:8080``) and
-    defaults to ``http://`` so aiohttp does not reject a scheme-less URL.
-    """
-    url = (proxy_url or "").strip().rstrip("/")
-    if not url:
-        return None
-    if not url.startswith(("http://", "https://")):
-        url = f"http://{url}"
-    return url
 
 
 def _loads(text: str) -> Any:

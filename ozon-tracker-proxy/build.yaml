@@ -1,8 +1,0 @@
-# Base images per architecture. The Playwright image is a multi-arch manifest
-# (amd64 + arm64), so the same tag resolves to the right architecture.
-build_from:
-  amd64: mcr.microsoft.com/playwright/python:v1.51.0-jammy
-  aarch64: mcr.microsoft.com/playwright/python:v1.51.0-jammy
-labels:
-  org.opencontainers.image.title: Ozon Tracker Proxy
-  org.opencontainers.image.source: https://github.com/BrainDeLook/OzonTracker-HA

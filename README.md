@@ -1,98 +1,98 @@
-# OzonTracker-HA — трекинг посылок Ozon для Home Assistant
+# 📦 Ozon Package Tracker для Home Assistant
+
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![Validate](https://github.com/BrainDeLook/OzonTracker-HA/actions/workflows/validate.yml/badge.svg)](https://github.com/BrainDeLook/OzonTracker-HA/actions/workflows/validate.yml)
 
 Кастомная интеграция Home Assistant для отслеживания посылок маркетплейса
-**Ozon** плюс собственная Lovelace-карточка, в которой можно добавлять посылки
-(трек-номер + название), переименовывать и удалять их.
+**Ozon** + собственная Lovelace‑карточка, в которой можно добавлять посылки
+(трек‑номер + название), переименовывать и удалять их.
 
 Данные по умолчанию берутся с агрегатора
-[track365.ru](https://track365.ru/) — **работает сразу, без прокси и
-антибота**. Опционально можно переключиться на прямой источник
-`tracking.ozon.ru` (там нужен обход антибота — см. ниже).
+[track365.ru](https://track365.ru/) — **работает сразу, без каких‑либо
+дополнительных настроек**. Статусы приходят в человекочитаемом виде и часто
+подробнее оригинального трекинга Ozon.
 
-Сделано по мотивам
-[HA_aliexpress_package_tracker_sensor](https://github.com/yohaybn/HA_aliexpress_package_tracker_sensor).
+> Сделано по мотивам
+> [HA_aliexpress_package_tracker_sensor](https://github.com/yohaybn/HA_aliexpress_package_tracker_sensor).
 
-## Возможности
+## ✨ Возможности
 
-- 🚀 **Источник track365 по умолчанию** — трекинг Ozon работает из коробки,
-  без прокси, аддонов и обхода антибота; статусы человекочитаемые и подробные.
 - 📦 Отдельный сенсор `sensor.ozon_package_<трек>` на каждую посылку —
-  состояние = текущий статус доставки, в атрибутах история событий,
-  курьерская служба и ссылка на страницу трекинга.
-- 🃏 Lovelace-карточка `custom:ozon-package-card` устанавливается вместе с
-  интеграцией автоматически: список посылок, форма добавления
-  (трек-номер + название), переименование, удаление, раскрываемая история
-  событий по клику.
+  состояние = текущий статус доставки; в атрибутах вся история событий,
+  курьер, флаг «доставлено» и ссылка на страницу трекинга.
+- 🃏 Lovelace‑карточка `custom:ozon-package-card` ставится вместе с
+  интеграцией: список посылок, форма добавления (трек + название),
+  переименование, удаление и раскрываемая история со скроллом.
 - 🔔 Событие `ozon_package_tracker_data_updated` при смене статуса — удобно
-  для автоматизаций (уведомление «посылка приехала в пункт выдачи»).
+  для автоматизаций и уведомлений.
+- 🟢 Зелёный значок только когда посылка действительно доставлена/выдана.
 - 🧹 Опциональное автоудаление доставленных посылок через N дней.
-- 💾 Посылки хранятся в постоянном хранилище HA и переживают перезагрузку;
-  при недоступности Ozon показываются последние известные данные.
+- 💾 Посылки хранятся в HA и переживают перезагрузку; при недоступности
+  сервиса показываются последние известные данные.
 
-## Установка
+## 🚀 Установка
 
-### HACS (рекомендуется)
+### Через HACS (рекомендуется)
 
-1. HACS → меню (⋮) → *Пользовательские репозитории*.
-2. Добавьте `https://github.com/BrainDeLook/OzonTracker-HA`, категория
-   **Integration**.
-3. Установите «Ozon Package Tracker» и перезапустите Home Assistant.
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=BrainDeLook&repository=OzonTracker-HA&category=integration)
+
+1. Нажмите кнопку выше (или в HACS: меню ⋮ → *Пользовательские репозитории* →
+   добавьте `https://github.com/BrainDeLook/OzonTracker-HA`, категория
+   **Integration**).
+2. Установите **Ozon Package Tracker** и перезапустите Home Assistant.
 
 ### Вручную
 
-Скопируйте `custom_components/ozon_package_tracker` в папку
-`custom_components` вашей конфигурации и перезапустите Home Assistant.
+Скопируйте папку `custom_components/ozon_package_tracker` в `custom_components`
+вашей конфигурации Home Assistant и перезапустите его.
 
-## Настройка
+## ⚙️ Настройка
 
 1. *Настройки → Устройства и службы → Добавить интеграцию* →
    **Ozon Package Tracker**.
-2. В опциях интеграции можно изменить:
-   - **Источник данных** (по умолчанию **track365** — рекомендуется);
-   - интервал опроса (по умолчанию 30 минут);
-   - автоудаление доставленных посылок (0 = выключено).
+2. Добавьте карточку `custom:ozon-package-card` на дашборд (ресурс
+   регистрируется автоматически) и вводите трек‑номера прямо в ней.
+
+Параметры интеграции (*Настроить*):
+
+| Параметр | По умолчанию | Описание |
+|---|---|---|
+| **Источник данных** | `track365` | Откуда берутся данные (см. ниже). |
+| **Проверять SSL‑сертификат** | вкл. | Обычно не трогать — проверка автоматическая. |
+| **Интервал обновления** | 60 мин | Как часто опрашивать сервис. |
+| **Автоудаление доставленных** | 0 (выкл.) | Удалять доставленные посылки через N дней. |
+| **Заголовок Cookie** | — | Только для источника Ozon (см. ниже). |
 
 ### Источник данных
 
-- **track365 (по умолчанию, рекомендуется)** — интеграция берёт данные с
-  агрегатора [track365.ru](https://track365.ru/), который отслеживает посылки
-  Ozon (и не только). **Работает сразу, без прокси, аддонов и антибота** —
-  ничего дополнительно ставить не нужно. Статусы приходят в человекочитаемом
-  виде и часто подробнее оригинального трекинга.
-- **Ozon напрямую** — данные берутся прямо с `tracking.ozon.ru`. Но там
-  стоит серьёзный антибот (JS-challenge), поэтому этот режим требует либо
-  запущенного дополнения `ozon-tracker-proxy` (см. ниже), либо ручной куки.
-  Выбирайте только если по какой-то причине не хотите использовать
-  сторонний агрегатор.
+- **track365 (по умолчанию, рекомендуется)** — данные с агрегатора
+  [track365.ru](https://track365.ru/), который отслеживает посылки Ozon.
+  **Ничего дополнительно настраивать не нужно.**
+- **Ozon напрямую** — данные берутся прямо с `tracking.ozon.ru`. Сайт
+  закрыт антибот‑защитой, поэтому для этого режима нужно вставить **cookie**
+  из браузера, где открыт tracking.ozon.ru (поле «Заголовок Cookie»). Кука
+  периодически протухает и её приходится обновлять — режим для продвинутых
+  пользователей.
 
-Карточка регистрируется как ресурс Lovelace автоматически. Если панель
-работает в YAML-режиме, добавьте ресурс вручную:
+## 🃏 Карточка Lovelace
 
-```yaml
-lovelace:
-  resources:
-    - url: /ozon_package_tracker/ozon-package-card.js
-      type: module
-```
-
-## Карточка Lovelace
-
-Добавьте карточку через UI (поиск «Ozon Package Card») или в YAML:
+Добавьте через UI (поиск «Ozon Package Card») или в YAML:
 
 ```yaml
 type: custom:ozon-package-card
 title: Мои посылки          # необязательно
 show_add_form: true          # форма «трек + название»
-show_track_number: true      # трек-номер под названием
+show_track_number: true      # трек‑номер под названием
 show_last_event: true        # время последнего события
-max_events: 0                # событий в раскрытой истории (0 = все)
+max_events: 0                # событий в раскрытой истории (0 = все, со скроллом)
 # entities:                  # необязательно: явный список сенсоров
 #   - sensor.ozon_package_33310100_0168_1
 ```
 
-Без `entities` карточка сама находит все посылки интеграции.
+Без `entities` карточка сама находит все посылки интеграции. По клику на
+посылку раскрывается история событий (со скроллом).
 
-## Сервисы
+## 🛠 Сервисы
 
 | Сервис | Параметры | Описание |
 |---|---|---|
@@ -110,7 +110,7 @@ data:
   title: "Наушники"
 ```
 
-## Автоматизация на смену статуса
+## 🤖 Автоматизация на смену статуса
 
 ```yaml
 automation:
@@ -125,117 +125,36 @@ automation:
           message: "{{ trigger.event.data.new_status }}"
 ```
 
-## Ограничения и примечания
+## 📝 Примечания
 
-- **Источник track365 (по умолчанию)** использует неофициальный эндпоинт
-  `track365.ru` (`GET /TRACK_SERVER.php`). Параметр `fp` — это простая
-  клиентская обфускация (base64 от `char ^ 6`), воспроизведённая в
-  `api.py`; если track365 изменит алгоритм, может потребоваться правка.
-  Данные о посылке идут через сторонний сервис track365.
-- **Источник Ozon** использует эндпоинт `tracking.ozon.ru`
-  (`GET /p-api/ozon-track-bff/tracking/{трек}`) и упирается в антибот —
-  см. ниже.
-- Оба сервиса блокируют запросы с зарубежных/датацентровых IP. Нужен
-  российский домашний канал (не зарубежный VPN/VPS).
-
----
-
-## Только для источника «Ozon напрямую»
-
-Всё, что ниже, нужно **только если вы выбрали источник Ozon**. При источнике
-**track365** (по умолчанию) ничего этого не требуется.
-
-### Ozon-события в виде кодов
-
-Ответ Ozon содержит события кодами (`Created`, `WayToCity`, `Delivered`, …) —
-интеграция переводит их в человекочитаемые статусы, незнакомые коды
-показываются «как есть».
-
-### Обход антибота: headless-браузер прокси
-
-Tracking.ozon.ru закрыт антибот-защитой с **JavaScript-challenge**
-(`fab_ichlg`; в теле 403 видны `challengeURL` / `incidentId`). Токен доступа
-вычисляется JavaScript'ом и кладётся в куку — получить его можно **только
-выполнив этот JS в настоящем браузере**. Ни правильные заголовки, ни имитация
-TLS (`curl_cffi`) challenge не решают, а вставленная вручную кука протухает
-через часы-сутки.
-
-Поэтому рекомендуемый способ — поднять рядом с Home Assistant дополнение
-**`ozon-tracker-proxy`** (папка [`ozon-tracker-proxy/`](ozon-tracker-proxy)):
-оно держит headless-Chromium (Playwright), само проходит challenge, обновляет
-куки в фоне и отдаёт интеграции готовый JSON. Вставлять куки руками больше не
-нужно.
-
-**Способ A — Home Assistant Add-on (рекомендуется для HAOS/Supervised):**
-
-1. *Настройки → Дополнения → Магазин дополнений* → меню **⋮** →
-   **Репозитории** → добавьте
-   `https://github.com/BrainDeLook/OzonTracker-HA`.
-2. Установите дополнение **«Ozon Tracker Proxy»**, запустите, включите
-   «Запускать при загрузке» и «Watchdog».
-3. В опциях интеграции укажите **URL прокси** = `http://<IP-HA>:8080`.
-
-> Поддерживаются только архитектуры **amd64** и **aarch64** — Chromium от
-> Playwright не собирается под armv7/armhf (старые Raspberry Pi).
-
-**Способ B — Docker Compose (для обычного Docker/NAS/мини-ПК):**
-
-```bash
-cd ozon-tracker-proxy
-docker compose up -d --build
-curl http://localhost:8080/healthz          # {"status": "ok"}
-```
-
-Затем в HA: *Настройки → Устройства и службы → Ozon Package Tracker →
-Настроить* → в поле **«URL headless-браузер прокси»** укажите адрес сервиса,
-напр. `http://homeassistant.local:8080` (или IP хоста с Docker).
-
-Требования: ~350–500 МБ RAM под Chromium. На «чистой» Home Assistant OS без
-поддерживаемой архитектуры используйте способ B на отдельной машине в той же
-сети. Подробности и опции — в [`ozon-tracker-proxy/DOCS.md`](ozon-tracker-proxy/DOCS.md).
-
-### Без прокси (запасные варианты)
-
-Если прокси не используется, интеграция обращается к Ozon напрямую и пытается
-обойти защиту заголовками приложения (`x-o3-app-name` / `x-o3-app-version` +
-актуальный Chrome) и имитацией TLS через `curl_cffi`. Этого **может не
-хватить** — тогда как крайний вариант вставьте куку браузера в поле
-**«Заголовок Cookie»** (DevTools → Network → заголовок `cookie`); учтите, что
-она протухает и её придётся периодически обновлять.
-
-Примечания:
-
-- Если через несколько месяцев `403` вернётся при прямом доступе, Ozon мог
-  поднять версию приложения — обновите `x-o3-app-version` в
-  `custom_components/ozon_package_tracker/api.py` (и в `ozon-tracker-proxy`
-  через переменную `OZON_APP_VERSION`).
-- Убедитесь, что HA/прокси выходят в интернет с российского IP (не через
-  зарубежный VPN/VPS): при зарубежном адресе антибот может блокировать
-  запрос независимо от способа.
-- Трек-номер — это номер отправления Ozon вида `33310100-0168-1`
-  (виден на странице заказа и на [tracking.ozon.ru](https://tracking.ozon.ru/)).
+- Источник **track365** — сторонний сервис: данные о посылке идут через него.
+  Параметр `fp` его API воспроизведён в интеграции; если track365 изменит
+  алгоритм, потребуется обновление.
+- Оба сервиса (track365 и Ozon) отдают данные только для российских
+  IP‑адресов. Нужен российский домашний канал (не зарубежный VPN/VPS).
+- Трек‑номер — это номер отправления Ozon вида `33310100-0168-1` (виден на
+  странице заказа и на [tracking.ozon.ru](https://tracking.ozon.ru/)).
 
 ---
 
 # English
 
-Home Assistant custom integration that tracks **Ozon** marketplace packages
-via the public [tracking.ozon.ru](https://tracking.ozon.ru/) service, with a
-bundled Lovelace card for adding packages (tracking number + name), renaming
-and removing them. Inspired by
-[HA_aliexpress_package_tracker_sensor](https://github.com/yohaybn/HA_aliexpress_package_tracker_sensor).
+Home Assistant custom integration that tracks **Ozon** marketplace parcels,
+with a bundled Lovelace card to add packages (tracking number + name), rename
+and remove them. By default it reads data from the
+[track365.ru](https://track365.ru/) aggregator — **works out of the box**, with
+rich human‑readable statuses.
 
-- One sensor per package (`sensor.ozon_package_<track>`), state = current
-  delivery status, attributes include event history and a tracking URL.
-- Card auto-registers as a Lovelace resource; add it as
-  `type: custom:ozon-package-card`.
+Install via HACS (use the button above or add
+`https://github.com/BrainDeLook/OzonTracker-HA` as a custom **Integration**
+repository), then add the integration and drop the `custom:ozon-package-card`
+card on a dashboard.
+
+- One sensor per package (`sensor.ozon_package_<track>`); state = current
+  status, attributes hold the full event history and a tracking URL.
 - Services: `add_tracking`, `remove_tracking`, `edit_title`, `refresh`.
 - `ozon_package_tracker_data_updated` event fires on status changes.
-- Ozon guards the endpoint with a JavaScript anti-bot challenge. The
-  recommended way around it is the bundled [`ozon-tracker-proxy`](ozon-tracker-proxy)
-  service — a headless Chromium (Playwright) that solves the challenge,
-  auto-refreshes cookies and serves the tracking JSON to the integration.
-  Set its URL in the integration options.
-- Note: the endpoint is unofficial and Ozon geo-blocks non-Russian /
-  datacenter IPs, so the integration/proxy is expected to run from a Russian
+- **Data source** option: `track365` (default, recommended) or `ozon` (direct
+  `tracking.ozon.ru`, which needs a browser cookie because of the anti-bot).
+- Note: both services only serve Russian IPs; run Home Assistant on a Russian
   residential connection.

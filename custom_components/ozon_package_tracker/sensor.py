@@ -65,7 +65,7 @@ class OzonPackageSensor(
     """State of a single Ozon package."""
 
     _attr_should_poll = False
-    _attr_attribution = "Данные предоставлены tracking.ozon.ru"
+    _attr_attribution = "track365.ru / tracking.ozon.ru"
 
     def __init__(self, coordinator: OzonPackageCoordinator, track: str) -> None:
         super().__init__(coordinator)

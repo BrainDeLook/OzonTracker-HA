@@ -18,7 +18,6 @@ from homeassistant.helpers import selector
 from .const import (
     CONF_AUTO_DELETE_DAYS,
     CONF_COOKIE,
-    CONF_PROXY_URL,
     CONF_SOURCE,
     CONF_UPDATE_INTERVAL,
     CONF_VERIFY_SSL,
@@ -27,6 +26,8 @@ from .const import (
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_VERIFY_SSL,
     DOMAIN,
+    MAX_UPDATE_INTERVAL,
+    MIN_UPDATE_INTERVAL,
     SOURCE_OZON,
     SOURCE_TRACK365,
 )
@@ -79,15 +80,12 @@ class OzonPackageTrackerOptionsFlow(OptionsFlow):
                     default=options.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
                 ): selector.BooleanSelector(),
                 vol.Optional(
-                    CONF_PROXY_URL,
-                    description={"suggested_value": options.get(CONF_PROXY_URL, "")},
-                ): selector.TextSelector(
-                    selector.TextSelectorConfig(type=selector.TextSelectorType.URL)
-                ),
-                vol.Optional(
                     CONF_UPDATE_INTERVAL,
                     default=options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL),
-                ): vol.All(vol.Coerce(int), vol.Range(min=5, max=1440)),
+                ): vol.All(
+                    vol.Coerce(int),
+                    vol.Range(min=MIN_UPDATE_INTERVAL, max=MAX_UPDATE_INTERVAL),
+                ),
                 vol.Optional(
                     CONF_AUTO_DELETE_DAYS,
                     default=options.get(

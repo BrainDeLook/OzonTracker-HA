@@ -23,7 +23,6 @@ from .const import (
     ATTR_TRACKING_NUMBER,
     CARD_FILENAME,
     CONF_COOKIE,
-    CONF_PROXY_URL,
     CONF_SOURCE,
     CONF_VERIFY_SSL,
     DEFAULT_SOURCE,
@@ -82,7 +81,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     api = OzonTrackingApi(
         session,
         cookie=entry.options.get(CONF_COOKIE),
-        proxy_url=entry.options.get(CONF_PROXY_URL),
         source=entry.options.get(CONF_SOURCE, DEFAULT_SOURCE),
         verify_ssl=entry.options.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
     )
