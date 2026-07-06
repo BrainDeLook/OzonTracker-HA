@@ -1,7 +1,8 @@
 # 📦 Ozon Package Tracker для Home Assistant
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
-[![Validate](https://github.com/BrainDeLook/OzonTracker-HA/actions/workflows/validate.yml/badge.svg)](https://github.com/BrainDeLook/OzonTracker-HA/actions/workflows/validate.yml)
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
+[![GitHub Release](https://img.shields.io/github/v/release/BrainDeLook/OzonTracker-HA?style=for-the-badge)](https://github.com/BrainDeLook/OzonTracker-HA/releases)
+[![License](https://img.shields.io/github/license/BrainDeLook/OzonTracker-HA.svg?style=for-the-badge)](LICENSE)
 
 Кастомная интеграция Home Assistant для отслеживания посылок маркетплейса
 **Ozon** + собственная Lovelace‑карточка, в которой можно добавлять посылки
