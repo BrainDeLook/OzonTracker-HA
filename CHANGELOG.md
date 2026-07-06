@@ -3,6 +3,13 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/),
 версии — на [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [1.0.1] - 2026-07-06
+
+### Исправлено
+- Hassfest‑валидация: объявлена зависимость `http` в манифесте (интеграция
+  использует `hass.http` для отдачи карточки Lovelace, но манифест не
+  указывал это явно).
+
 ## [1.0.0] - 2026-07-06
 
 Первый официальный релиз. По сути — 0.9.4 под новым номером: версии
@@ -125,6 +132,7 @@
 0.9.0 — упомянуто здесь только для истории, в текущем коде ничего из этого
 не осталось.
 
+[1.0.1]: https://github.com/BrainDeLook/OzonTracker-HA/releases/tag/v1.0.1
 [1.0.0]: https://github.com/BrainDeLook/OzonTracker-HA/releases/tag/v1.0.0
 [0.9.4]: https://github.com/BrainDeLook/OzonTracker-HA/releases/tag/v0.9.4
 [0.9.3]: https://github.com/BrainDeLook/OzonTracker-HA/releases/tag/v0.9.3
