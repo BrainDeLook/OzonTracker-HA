@@ -13,5 +13,5 @@
     "curl_cffi>=0.7.0"
   ],
   "single_config_entry": true,
-  "version": "0.9.4"
+  "version": "1.0.0"
 }
