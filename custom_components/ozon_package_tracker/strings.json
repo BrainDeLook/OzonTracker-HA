@@ -23,7 +23,7 @@
         },
         "data_description": {
           "source": "track365 (recommended): query track365.ru — works out of the box, no proxy or anti-bot. Ozon: query tracking.ozon.ru directly (needs the headless-browser proxy or a cookie because of the anti-bot).",
-          "verify_ssl": "Turn off only if requests fail with 'certificate has expired' (track365 sometimes lets its TLS certificate lapse). Off = do not verify the certificate.",
+          "verify_ssl": "SSL verification is automatic: if track365's certificate is expired/invalid, the integration retries without it. Turn this off only to skip verification from the very first request.",
           "proxy_url": "Only used with source Ozon: URL of the companion ozon-tracker-proxy service, e.g. http://homeassistant.local:8080.",
           "cookie": "Only used with source Ozon (last resort): the 'cookie' request header from a browser that opened tracking.ozon.ru."
         }

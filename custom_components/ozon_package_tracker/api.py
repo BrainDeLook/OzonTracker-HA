@@ -467,25 +467,42 @@ class OzonTrackingApi:
             "sec-ch-ua-platform": '"Windows"',
         }
         params = {"fp": fp, "r": str(random.randint(1, 10000))}
-        try:
+
+        async def _do_request(ssl_value: Any) -> tuple[int, str]:
             async with self._session.get(
                 TRACK365_ENDPOINT,
                 params=params,
                 headers=headers,
                 timeout=REQUEST_TIMEOUT,
-                ssl=self._ssl,
+                ssl=ssl_value,
             ) as resp:
-                body = await resp.text()
-                status = resp.status
+                return resp.status, await resp.text()
+
+        try:
+            status, body = await _do_request(self._ssl)
+        except aiohttp.ClientSSLError as err:
+            # track365 periodically lets its TLS certificate expire. If we were
+            # verifying, transparently retry once without verification and stop
+            # verifying for the rest of this session (avoids per-poll retries).
+            if self._ssl is False:
+                raise OzonTrackingApiError(
+                    f"Could not reach track365.ru (TLS): {err}"
+                ) from err
+            _LOGGER.warning(
+                "track365 TLS certificate rejected (%s); retrying without "
+                "verification and disabling it for this session",
+                err,
+            )
+            self._ssl = False
+            try:
+                status, body = await _do_request(False)
+            except (aiohttp.ClientError, asyncio.TimeoutError) as err2:
+                raise OzonTrackingApiError(
+                    f"Could not reach track365.ru: {err2.__class__.__name__}: {err2}"
+                ) from err2
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-            hint = ""
-            if "certificate" in str(err).lower() and self._ssl is not False:
-                hint = (
-                    " — track365's TLS certificate looks invalid/expired; "
-                    "turn off the 'Verify SSL certificate' option to ignore it"
-                )
             raise OzonTrackingApiError(
-                f"Could not reach track365.ru: {err.__class__.__name__}: {err}{hint}"
+                f"Could not reach track365.ru: {err.__class__.__name__}: {err}"
             ) from err
 
         if status != 200:
