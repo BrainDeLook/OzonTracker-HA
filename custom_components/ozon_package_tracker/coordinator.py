@@ -153,6 +153,13 @@ class OzonPackageCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                     meta["last_data"] = info
                     meta["last_success"] = now.isoformat()
                     store_dirty = True
+                    _LOGGER.debug(
+                        "Checked %s: status=%r, delivered=%s, source=%s",
+                        track,
+                        info.get("status"),
+                        info.get("delivered"),
+                        info.get("source"),
+                    )
                 except OzonTrackingApiError as err:
                     _LOGGER.warning("Could not update Ozon package %s: %s", track, err)
                     info = meta.get("last_data") or _empty_info(track)
@@ -189,24 +196,38 @@ class OzonPackageCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         for track, new_info in results.items():
             old_status = (previous.get(track) or {}).get("status")
             new_status = new_info.get("status")
-            if old_status is not None and new_status is not None and old_status != new_status:
-                self.hass.bus.async_fire(
-                    EVENT_DATA_UPDATED,
-                    {
-                        "tracking_number": track,
-                        "title": new_info.get("title"),
-                        "old_status": old_status,
-                        "new_status": new_status,
-                        "delivered": new_info.get("delivered", False),
-                    },
+
+            if old_status is None or new_status is None:
+                _LOGGER.debug(
+                    "%s: nothing to compare yet (old=%r, new=%r)",
+                    track,
+                    old_status,
+                    new_status,
                 )
-                if notify_targets and (
-                    notify_level == NOTIFY_LEVEL_ALL
-                    or _is_pickup_status(new_status)
-                ):
-                    await self._async_notify(
-                        notify_targets, new_info.get("title") or track, new_status
-                    )
+                continue
+            if old_status == new_status:
+                _LOGGER.debug("%s: status unchanged (%r)", track, new_status)
+                continue
+
+            _LOGGER.debug(
+                "%s: status changed %r -> %r", track, old_status, new_status
+            )
+            self.hass.bus.async_fire(
+                EVENT_DATA_UPDATED,
+                {
+                    "tracking_number": track,
+                    "title": new_info.get("title"),
+                    "old_status": old_status,
+                    "new_status": new_status,
+                    "delivered": new_info.get("delivered", False),
+                },
+            )
+            if notify_targets and (
+                notify_level == NOTIFY_LEVEL_ALL or _is_pickup_status(new_status)
+            ):
+                await self._async_notify(
+                    notify_targets, new_info.get("title") or track, new_status
+                )
 
         if store_dirty:
             await self._async_save()
