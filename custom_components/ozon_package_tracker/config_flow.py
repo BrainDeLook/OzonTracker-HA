@@ -13,6 +13,7 @@ from homeassistant.config_entries import (
     OptionsFlow,
 )
 from homeassistant.core import callback
+from homeassistant.data_entry_flow import section
 from homeassistant.helpers import selector
 
 from .const import (
@@ -64,75 +65,119 @@ class OzonPackageTrackerConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class OzonPackageTrackerOptionsFlow(OptionsFlow):
-    """Update interval and auto-delete options."""
+    """Options grouped into sections: data source, notifications, advanced."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
-            return self.async_create_entry(data=user_input)
+            # Sections come back as one nested dict per section; options are
+            # stored flat, same as before sections were introduced.
+            flat: dict[str, Any] = {}
+            for section_data in user_input.values():
+                flat.update(section_data)
+            return self.async_create_entry(data=flat)
 
         options = self.config_entry.options
         schema = vol.Schema(
             {
-                vol.Optional(
-                    CONF_SOURCE,
-                    default=options.get(CONF_SOURCE, DEFAULT_SOURCE),
-                ): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=[SOURCE_TRACK365, SOURCE_OZON],
-                        translation_key="source",
-                        mode=selector.SelectSelectorMode.DROPDOWN,
-                    )
-                ),
-                vol.Optional(
-                    CONF_VERIFY_SSL,
-                    default=options.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
-                ): selector.BooleanSelector(),
-                vol.Optional(
-                    CONF_LINK_TARGET,
-                    default=options.get(CONF_LINK_TARGET, DEFAULT_LINK_TARGET),
-                ): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=[LINK_TARGET_AUTO, LINK_TARGET_TRACK365, LINK_TARGET_OZON],
-                        translation_key="link_target",
-                        mode=selector.SelectSelectorMode.DROPDOWN,
-                    )
-                ),
-                vol.Optional(
-                    CONF_UPDATE_INTERVAL,
-                    default=options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL),
-                ): vol.All(
-                    vol.Coerce(int),
-                    vol.Range(min=MIN_UPDATE_INTERVAL, max=MAX_UPDATE_INTERVAL),
-                ),
-                vol.Optional(
-                    CONF_AUTO_DELETE_DAYS,
-                    default=options.get(
-                        CONF_AUTO_DELETE_DAYS, DEFAULT_AUTO_DELETE_DAYS
+                vol.Required("data_source"): section(
+                    vol.Schema(
+                        {
+                            vol.Optional(
+                                CONF_SOURCE,
+                                default=options.get(CONF_SOURCE, DEFAULT_SOURCE),
+                            ): selector.SelectSelector(
+                                selector.SelectSelectorConfig(
+                                    options=[SOURCE_TRACK365, SOURCE_OZON],
+                                    translation_key="source",
+                                    mode=selector.SelectSelectorMode.DROPDOWN,
+                                )
+                            ),
+                            vol.Optional(
+                                CONF_VERIFY_SSL,
+                                default=options.get(
+                                    CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL
+                                ),
+                            ): selector.BooleanSelector(),
+                            vol.Optional(
+                                CONF_LINK_TARGET,
+                                default=options.get(
+                                    CONF_LINK_TARGET, DEFAULT_LINK_TARGET
+                                ),
+                            ): selector.SelectSelector(
+                                selector.SelectSelectorConfig(
+                                    options=[
+                                        LINK_TARGET_AUTO,
+                                        LINK_TARGET_TRACK365,
+                                        LINK_TARGET_OZON,
+                                    ],
+                                    translation_key="link_target",
+                                    mode=selector.SelectSelectorMode.DROPDOWN,
+                                )
+                            ),
+                            vol.Optional(
+                                CONF_COOKIE,
+                                description={
+                                    "suggested_value": options.get(CONF_COOKIE, "")
+                                },
+                            ): selector.TextSelector(
+                                selector.TextSelectorConfig(multiline=True)
+                            ),
+                        }
                     ),
-                ): vol.All(vol.Coerce(int), vol.Range(min=0, max=90)),
-                vol.Optional(
-                    CONF_NOTIFY_TARGETS,
-                    default=options.get(CONF_NOTIFY_TARGETS, []),
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="notify", multiple=True)
+                    {"collapsed": False},
                 ),
-                vol.Optional(
-                    CONF_NOTIFY_LEVEL,
-                    default=options.get(CONF_NOTIFY_LEVEL, DEFAULT_NOTIFY_LEVEL),
-                ): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=[NOTIFY_LEVEL_ALL, NOTIFY_LEVEL_PICKUP],
-                        translation_key="notify_level",
-                        mode=selector.SelectSelectorMode.DROPDOWN,
-                    )
+                vol.Required("notifications"): section(
+                    vol.Schema(
+                        {
+                            vol.Optional(
+                                CONF_NOTIFY_TARGETS,
+                                default=options.get(CONF_NOTIFY_TARGETS, []),
+                            ): selector.EntitySelector(
+                                selector.EntitySelectorConfig(
+                                    domain="notify", multiple=True
+                                )
+                            ),
+                            vol.Optional(
+                                CONF_NOTIFY_LEVEL,
+                                default=options.get(
+                                    CONF_NOTIFY_LEVEL, DEFAULT_NOTIFY_LEVEL
+                                ),
+                            ): selector.SelectSelector(
+                                selector.SelectSelectorConfig(
+                                    options=[NOTIFY_LEVEL_ALL, NOTIFY_LEVEL_PICKUP],
+                                    translation_key="notify_level",
+                                    mode=selector.SelectSelectorMode.DROPDOWN,
+                                )
+                            ),
+                        }
+                    ),
+                    {"collapsed": True},
                 ),
-                vol.Optional(
-                    CONF_COOKIE,
-                    description={"suggested_value": options.get(CONF_COOKIE, "")},
-                ): selector.TextSelector(
-                    selector.TextSelectorConfig(multiline=True)
+                vol.Required("advanced"): section(
+                    vol.Schema(
+                        {
+                            vol.Optional(
+                                CONF_UPDATE_INTERVAL,
+                                default=options.get(
+                                    CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
+                                ),
+                            ): vol.All(
+                                vol.Coerce(int),
+                                vol.Range(
+                                    min=MIN_UPDATE_INTERVAL, max=MAX_UPDATE_INTERVAL
+                                ),
+                            ),
+                            vol.Optional(
+                                CONF_AUTO_DELETE_DAYS,
+                                default=options.get(
+                                    CONF_AUTO_DELETE_DAYS, DEFAULT_AUTO_DELETE_DAYS
+                                ),
+                            ): vol.All(vol.Coerce(int), vol.Range(min=0, max=90)),
+                        }
+                    ),
+                    {"collapsed": True},
                 ),
             }
         )

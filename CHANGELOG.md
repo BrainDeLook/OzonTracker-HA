@@ -3,6 +3,14 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.0.0/),
 версии — на [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [1.1.0] - 2026-07-07
+
+### Изменено
+- Форма настроек (*Настроить*) разбита на секции: «Источник данных»
+  (источник, SSL, ссылка трекинга, cookie), «Уведомления» (устройства,
+  уровень) и «Дополнительно» (интервал опроса, автоудаление). Сами
+  параметры и их поведение не изменились.
+
 ## [1.0.3] - 2026-07-06
 
 ### Инфраструктура
@@ -147,6 +155,7 @@
 0.9.0 — упомянуто здесь только для истории, в текущем коде ничего из этого
 не осталось.
 
+[1.1.0]: https://github.com/BrainDeLook/OzonTracker-HA/releases/tag/v1.1.0
 [1.0.3]: https://github.com/BrainDeLook/OzonTracker-HA/releases/tag/v1.0.3
 [1.0.2]: https://github.com/BrainDeLook/OzonTracker-HA/releases/tag/v1.0.2
 [1.0.1]: https://github.com/BrainDeLook/OzonTracker-HA/releases/tag/v1.0.1

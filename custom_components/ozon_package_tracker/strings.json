@@ -13,8 +13,22 @@
   "options": {
     "step": {
       "init": {
+        "sections": {
+          "data_source": {
+            "name": "Data source",
+            "description": "Where tracking data comes from, where the card's link points, and the Ozon cookie."
+          },
+          "notifications": {
+            "name": "Notifications",
+            "description": "Push notifications on status change."
+          },
+          "advanced": {
+            "name": "Advanced",
+            "description": "Polling interval and auto-delete."
+          }
+        },
         "data": {
-          "source": "Data source",
+          "source": "Source",
           "verify_ssl": "Verify SSL certificate",
           "link_target": "\"Open tracking page\" link",
           "update_interval": "Update interval (minutes)",
